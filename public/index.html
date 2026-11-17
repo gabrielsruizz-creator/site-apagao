@@ -168,7 +168,32 @@
   .mk .lbl{display:none;position:absolute;left:18px;top:12px;white-space:nowrap;font-size:11px}
   .mk:hover .lbl{display:block}
 
+  /* easter eggs */
+  #eggs{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+  .panel,#detail,#legend,#toast{z-index:10}
+  .egg{position:absolute;left:0;top:0;width:0;height:0;color:var(--ink);pointer-events:auto;cursor:pointer;opacity:0;will-change:transform}
+  .egg .rot{position:absolute;left:calc(var(--sz) / -2);top:calc(var(--sz) / -2);width:var(--sz);height:var(--sz)}
+  .egg svg{position:relative;width:100%;height:100%;fill:currentColor;filter:drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1px var(--paper));overflow:visible}
+  .egg:hover svg{transform:scale(1.35)}
+  .egg .trail{position:absolute;right:55%;top:50%;width:38px;height:1.5px;margin-top:-.75px;background:linear-gradient(to left,var(--ink),transparent);opacity:.55}
+  .egg.rocket .trail{width:30px;height:3px;margin-top:-1.5px;background:linear-gradient(to left,var(--ink),transparent);opacity:.8;filter:blur(.4px)}
+  .egg .wake{position:absolute;right:85%;top:50%;width:26px;height:9px;margin-top:-4.5px;border-radius:50%;
+    background:radial-gradient(ellipse at right,var(--ink),transparent 70%);opacity:.3}
+  .egg.ufo .rot{height:calc(var(--sz) * .6);top:calc(var(--sz) * -.3)}
+  .egg.ufo .beam{position:absolute;left:-13px;top:7px;width:26px;height:0;opacity:0;pointer-events:none;
+    background:linear-gradient(to bottom,var(--ink),transparent);clip-path:polygon(35% 0,65% 0,100% 100%,0 100%);transition:height .5s,opacity .5s}
+  .egg.ufo.hover .beam{height:44px;opacity:.28;animation:beam 1.4s ease-in-out infinite}
+  @keyframes beam{50%{opacity:.14}}
+  .egg .blink{animation:blinkl 1s steps(2) infinite}.egg .b2{animation-delay:.33s}.egg .b3{animation-delay:.66s}
+  @keyframes blinkl{50%{opacity:.2}}
+  #toast{position:fixed;left:50%;bottom:62px;transform:translate(calc(-50% + 185px),10px);max-width:min(460px,calc(100% - 32px));
+    padding:9px 14px;font-size:13px;background:var(--panel);border:1px solid var(--line-strong);border-radius:999px;color:var(--text);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;text-align:center}
+  #toast.on{opacity:1;transform:translate(calc(-50% + 185px),0)}
+
   @media (max-width:700px){
+    #toast{left:16px;right:16px;max-width:none;top:16px;bottom:auto;transform:translateY(-10px);border-radius:4px}
+    #toast.on{transform:none}
     .panel{top:auto;bottom:0;left:0;right:0;width:auto;max-height:52%;border-radius:4px 4px 0 0}
     #detail{left:16px;right:16px;width:auto;top:16px;bottom:auto;max-height:40%}
     #legend{left:16px;right:16px;bottom:auto;top:16px;transform:none;justify-content:center;white-space:normal;flex-wrap:wrap;border-radius:4px}
@@ -242,6 +267,8 @@
   </div>
 </aside>
 
+<div id="eggs" aria-hidden="true"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <div id="legend" aria-live="polite"></div>
 
 <div id="detail"><button class="x" id="closeDetail" aria-label="Fechar">×</button><div id="detailBody"></div></div>
@@ -847,6 +874,209 @@ async function loadAll() {
 }
 document.getElementById('refresh').onclick = loadAll;
 
+/* ---------- easter eggs: aviões, navios, satélites, foguetes e um OVNI ---------- */
+const Eggs = (() => {
+  const layer = document.getElementById('eggs');
+  const toastEl = document.getElementById('toast');
+  const R = Math.PI / 180;
+  const ICON = {
+    plane: '<svg viewBox="0 0 24 24"><path d="M21.5 12c0-.7-.6-1.2-1.3-1.2h-5.4L9.6 3h-2l2.6 7.8H5.4L3.6 8.5H2l1.2 3.5L2 15.5h1.6l1.8-2.3h4.8L7.6 21h2l5.2-7.8h5.4c.7 0 1.3-.5 1.3-1.2z"/></svg>',
+    ship: '<svg viewBox="0 0 24 24"><path d="M1.5 7.5h14.5l6.5 4.5-6.5 4.5H1.5l2-4.5z"/><rect x="5" y="9.6" width="3" height="4.8" rx=".5" fill="var(--paper)"/><rect x="9.5" y="9.6" width="3" height="4.8" rx=".5" fill="var(--paper)"/></svg>',
+    sat: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="6" height="6" rx="1"/><rect x="1" y="10" width="7" height="4" rx=".5" opacity=".75"/><rect x="16" y="10" width="7" height="4" rx=".5" opacity=".75"/><path d="M12 9V5.5M10.5 5.5h3" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>',
+    rocket: '<svg viewBox="0 0 24 24"><path d="M22 12c-3-3.2-7-4.6-12-4.2L7 12l3 4.2c5 .4 9-1 12-4.2z"/><path d="M10 7.8 6.5 4.5H4.8l1.9 4.4zM10 16.2l-3.5 3.3H4.8l1.9-4.4z"/><circle cx="15" cy="12" r="1.4" fill="var(--paper)"/></svg>',
+    ufo: '<svg viewBox="0 0 48 28"><ellipse cx="24" cy="10" rx="8" ry="7" fill="var(--paper)" stroke="currentColor" stroke-width="1.6"/><ellipse cx="24" cy="16" rx="22" ry="6"/><circle cx="12" cy="16.5" r="1.6" fill="var(--paper)" class="blink"/><circle cx="24" cy="18" r="1.6" fill="var(--paper)" class="blink b2"/><circle cx="36" cy="16.5" r="1.6" fill="var(--paper)" class="blink b3"/></svg>',
+  };
+
+  // ---------- geometria na esfera ----------
+  const toVec = (lat, lng) => [Math.cos(lat * R) * Math.cos(lng * R), Math.cos(lat * R) * Math.sin(lng * R), Math.sin(lat * R)];
+  const toLL = ([x, y, z]) => ({ lat: Math.asin(Math.max(-1, Math.min(1, z))) / R, lng: Math.atan2(y, x) / R });
+  function slerp(a, b, t) {
+    const A = toVec(a[0], a[1]), B = toVec(b[0], b[1]);
+    const d = Math.acos(Math.max(-1, Math.min(1, A[0] * B[0] + A[1] * B[1] + A[2] * B[2])));
+    if (d < 1e-6) return { lat: a[0], lng: a[1] };
+    const s = Math.sin(d), ka = Math.sin((1 - t) * d) / s, kb = Math.sin(t * d) / s;
+    return toLL([A[0] * ka + B[0] * kb, A[1] * ka + B[1] * kb, A[2] * ka + B[2] * kb]);
+  }
+  const arcLen = (a, b) => { const A = toVec(a[0], a[1]), B = toVec(b[0], b[1]); return Math.acos(Math.max(-1, Math.min(1, A[0] * B[0] + A[1] * B[1] + A[2] * B[2]))); };
+  // percorre uma rota de vários trechos com velocidade constante; t em [0,1)
+  function alongPath(pts, t) {
+    const lens = []; let total = 0;
+    for (let i = 0; i < pts.length - 1; i++) { const l = arcLen(pts[i], pts[i + 1]); lens.push(l); total += l; }
+    let d = t * total;
+    for (let i = 0; i < lens.length; i++) { if (d <= lens[i] || i === lens.length - 1) return slerp(pts[i], pts[i + 1], Math.min(1, d / lens[i])); d -= lens[i]; }
+  }
+
+  // ---------- rotas ----------
+  const C = {
+    GRU: [-23.43, -46.47], LIS: [38.77, -9.13], JFK: [40.64, -73.78], LHR: [51.47, -0.45], DXB: [25.25, 55.36],
+    SYD: [-33.94, 151.18], NRT: [35.77, 140.39], LAX: [33.94, -118.41], CDG: [49.01, 2.55], JNB: [-26.14, 28.24],
+    MIA: [25.79, -80.29], SCL: [-33.39, -70.79], SIN: [1.36, 103.99], FRA: [50.04, 8.56], GIG: [-22.81, -43.25], EZE: [-34.82, -58.54],
+  };
+  const NAME = { GRU: 'São Paulo', LIS: 'Lisboa', JFK: 'Nova York', LHR: 'Londres', DXB: 'Dubai', SYD: 'Sydney', NRT: 'Tóquio', LAX: 'Los Angeles',
+    CDG: 'Paris', JNB: 'Joanesburgo', MIA: 'Miami', SCL: 'Santiago', SIN: 'Singapura', FRA: 'Frankfurt', GIG: 'Rio de Janeiro', EZE: 'Buenos Aires' };
+  const FLIGHTS = [['GRU', 'LIS', 'TP 88'], ['JFK', 'LHR', 'BA 178'], ['DXB', 'SYD', 'EK 414'], ['NRT', 'LAX', 'JL 62'], ['CDG', 'JNB', 'AF 990'],
+    ['MIA', 'SCL', 'LA 501'], ['SIN', 'FRA', 'SQ 26'], ['GIG', 'MIA', 'AA 904'], ['EZE', 'GRU', 'G3 7461'], ['LHR', 'DXB', 'EK 2']];
+  const LANES = [
+    { name: 'porta-contêineres rumo a Roterdã', pts: [[-24.1, -45.5], [-10, -32], [10, -26], [30, -20], [44, -11], [49.5, -4]] },
+    { name: 'graneleiro saindo de Xangai', pts: [[30.5, 123.5], [32, 140], [40, 170], [42, -150], [36, -125]] },
+    { name: 'petroleiro contornando o Cabo da Boa Esperança', pts: [[12, 52], [0, 52], [-20, 42], [-36, 22], [-30, 5], [-10, -5], [5, -18]] },
+    { name: 'navio de cruzeiro no Caribe', pts: [[25.5, -79.5], [21, -74], [18, -67], [14, -62], [12, -70], [16, -81]] },
+    { name: 'cargueiro cruzando o Índico', pts: [[5.5, 80], [3, 90], [5, 98]] },
+    { name: 'veleiro dando a volta ao mundo', pts: [[-40, -60], [-45, -20], [-42, 20], [-45, 60], [-46, 110], [-48, 160], [-50, -150], [-55, -70]] },
+  ];
+  const SATS = [{ name: 'ISS · Estação Espacial Internacional', inc: 51.6, raan: 20, alt: 0.12, period: 46 },
+    { name: 'satélite meteorológico', inc: 98, raan: 140, alt: 0.2, period: 70 },
+    { name: 'satélite de telecomunicações', inc: 28, raan: 260, alt: 0.32, period: 95 }];
+  const PADS = [{ name: 'Alcântara (MA)', ll: [-2.37, -44.4] }, { name: 'Cabo Canaveral', ll: [28.49, -80.58] }, { name: 'Baikonur', ll: [45.92, 63.34] }];
+  const UFO_SPOTS = [
+    { name: 'Varginha (MG)', ll: [-21.55, -45.43], msg: 'O ET de Varginha mandou um oi.' },
+    { name: 'Área 51', ll: [37.24, -115.81], msg: 'Nada para ver aqui. Circulando.' },
+    { name: 'Roswell', ll: [33.39, -104.52], msg: 'Desde 1947 sem sinal de queda de internet por aqui.' },
+    { name: 'Nazca', ll: [-14.74, -75.13], msg: 'Procurando a pista de pouso desenhada no chão.' },
+    { name: 'Gizé', ll: [29.98, 31.13], msg: 'Só passando para conferir as pirâmides.' },
+    { name: 'Stonehenge', ll: [51.18, -1.83], msg: 'Recalibrando as pedras.' },
+    { name: 'Colares (PA)', ll: [-0.93, -48.28], msg: 'Operação Prato? Nunca ouvimos falar.' },
+  ];
+
+  // ---------- objetos ----------
+  const things = [];
+  function make(kind, size, onClick) {
+    const el = document.createElement('div');
+    el.className = 'egg ' + kind;
+    el.style.setProperty('--sz', size + 'px');
+    el.innerHTML = `<div class="rot">${kind === 'plane' || kind === 'rocket' ? '<i class="trail"></i>' : kind === 'ship' ? '<i class="wake"></i>' : ''}${ICON[kind]}</div>` +
+      (kind === 'ufo' ? '<i class="beam"></i>' : '');
+    el.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+    layer.appendChild(el);
+    return el;
+  }
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  FLIGHTS.forEach(([a, b, code], i) => {
+    const dur = 70 + arcLen(C[a], C[b]) * 40; // segundos
+    const t0 = Math.random();
+    const th = { kind: 'plane', alt: 0.035, el: make('plane', 15, () => toast(`✈ Voo ${code} · ${NAME[a]} → ${NAME[b]}. Tudo tranquilo a bordo.`)),
+      pos: (s) => { const u = (t0 + s / dur) % 2; const fwd = u < 1; return alongPath(fwd ? [C[a], C[b]] : [C[b], C[a]], fwd ? u : u - 1); } };
+    things.push(th);
+  });
+  LANES.forEach((lane) => {
+    const dur = 160 + lane.pts.length * 25, t0 = Math.random();
+    things.push({ kind: 'ship', alt: 0.003, el: make('ship', 17, () => toast(`🚢 Um ${lane.name}. Mar calmo.`)),
+      pos: (s) => { const u = (t0 + s / dur) % 2; return u < 1 ? alongPath(lane.pts, u) : alongPath([...lane.pts].reverse(), u - 1); } });
+  });
+  SATS.forEach((o) => {
+    const t0 = Math.random() * o.period;
+    things.push({ kind: 'sat', alt: o.alt, spin: true, el: make('sat', 15, () => toast(`🛰 ${o.name}. Sinal ótimo daqui de cima.`)),
+      pos: (s) => {
+        const th = ((s + t0) / o.period) * 2 * Math.PI, i = o.inc * R, W = o.raan * R;
+        const x = Math.cos(th), y = Math.sin(th) * Math.cos(i), z = Math.sin(th) * Math.sin(i);
+        return toLL([x * Math.cos(W) - y * Math.sin(W), x * Math.sin(W) + y * Math.cos(W), z]);
+      } });
+  });
+  // foguete: sobe da base, faz a curva para leste e some no espaço
+  const rocket = { kind: 'rocket', alt: 0, hidden: true, el: make('rocket', 16, () => toast(`🚀 Lançamento a partir de ${rocket.pad.name}. Boa viagem!`)), pad: PADS[0], start: 0 };
+  rocket.pos = (s) => {
+    const k = (s - rocket.start) / 16;
+    if (k < 0 || k > 1) { rocket.hidden = true; return { lat: 0, lng: 0 }; }
+    rocket.hidden = false; rocket.alt = 0.01 + 1.3 * k * k;
+    return { lat: rocket.pad.ll[0] + 4 * k, lng: rocket.pad.ll[1] + 30 * k };
+  };
+  things.push(rocket);
+  // OVNI: chega do espaço, paira com o feixe de luz e sai disparado
+  let sightings = 0;
+  const ufo = { kind: 'ufo', alt: 0, hidden: true, upright: true, el: make('ufo', 30, () => {
+    sightings++;
+    toast(`🛸 OVNI avistado sobre ${ufo.spot.name}. ${ufo.spot.msg}` + (sightings > 1 ? ` (${sightings} avistamentos)` : ''));
+    ufo.leaveAt = Math.min(ufo.leaveAt, clock + 0.6);
+  }), spot: UFO_SPOTS[0], start: -1e9, leaveAt: -1e9 };
+  ufo.pos = (s) => {
+    const k = s - ufo.start, end = ufo.leaveAt - ufo.start;
+    if (k < 0 || k > end + 1.4) { ufo.hidden = true; ufo.el.classList.remove('hover'); return { lat: 0, lng: 0 }; }
+    ufo.hidden = false;
+    const [la, ln] = ufo.spot.ll;
+    if (k < 2.2) { const e = 1 - Math.pow(1 - k / 2.2, 3); ufo.alt = 0.9 - 0.82 * e; ufo.el.classList.remove('hover'); return { lat: la - 12 * (1 - e), lng: ln - 25 * (1 - e) }; }
+    if (k < end) { ufo.alt = 0.08 + 0.008 * Math.sin(k * 2.4); ufo.el.classList.add('hover'); return { lat: la, lng: ln + 0.4 * Math.sin(k * 0.9) }; }
+    const e = (k - end) / 1.4; ufo.el.classList.remove('hover'); ufo.alt = 0.08 + 1.8 * e * e;
+    return { lat: la + 20 * e * e, lng: ln + 60 * e * e };
+  };
+  things.push(ufo);
+
+  // ---------- agenda dos eventos raros ----------
+  let clock = 0, nextRocket = rnd(25, 50), nextUfo = rnd(40, 80);
+  const camDir = () => { const c = world.camera().position; const l = Math.hypot(c.x, c.y, c.z); return [c.x / l, c.y / l, c.z / l]; };
+  function facing(lat, lng, alt) {
+    // a pessoa só vê o que está na face do globo virada para a câmera
+    const p = world.getCoords(lat, lng, alt), l = Math.hypot(p.x, p.y, p.z), c = camDir();
+    return (p.x * c[0] + p.y * c[1] + p.z * c[2]) / l;
+  }
+  function pickSpot(list, getLL) {
+    const vis = list.filter(x => facing(...getLL(x), 0) > 0.35);
+    const pool = vis.length ? vis : list;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  function summonUfo() {
+    if (!ufo.hidden) return;
+    ufo.spot = pickSpot(UFO_SPOTS, s => s.ll);
+    ufo.start = clock; ufo.leaveAt = clock + 2.2 + rnd(7, 11);
+  }
+  function launch() {
+    rocket.pad = pickSpot(PADS, p => p.ll);
+    rocket.start = clock;
+  }
+
+  // ---------- quadro a quadro ----------
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now; clock += dt;
+    if (clock > nextRocket) { launch(); nextRocket = clock + rnd(70, 140); }
+    if (clock > nextUfo) { summonUfo(); nextUfo = clock + rnd(60, 120); }
+    for (const th of things) {
+      const p = th.pos(clock);
+      if (th.hidden) { th.el.style.opacity = 0; th.el.style.pointerEvents = 'none'; continue; }
+      const f = facing(p.lat, p.lng, th.alt);
+      // objetos acima do globo continuam visíveis um pouco além da borda
+      const edge = th.alt > 0.1 ? -0.15 : 0.08;
+      if (f < edge) { th.el.style.opacity = 0; th.el.style.pointerEvents = 'none'; continue; }
+      const s = world.getScreenCoords(p.lat, p.lng, th.alt);
+      let ang = 0;
+      if (!th.upright) {
+        const q = th.pos(clock + 0.4);
+        const s2 = world.getScreenCoords(q.lat, q.lng, th.alt);
+        ang = Math.atan2(s2.y - s.y, s2.x - s.x) / R;
+        if (th.spin) ang = (clock * 20) % 360;
+      }
+      th.el.style.opacity = Math.min(1, (f - edge) * 6).toFixed(2);
+      th.el.style.pointerEvents = '';
+      th.el.style.transform = `translate(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px)`;
+      th.el.firstChild.style.transform = `rotate(${ang.toFixed(1)}deg)`;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  let toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('on'), 4200);
+  }
+
+  // segredo: digitar "ovni" chama o disco voador
+  let typed = '';
+  addEventListener('keydown', (e) => {
+    if (e.target.closest && e.target.closest('input, textarea')) return;
+    typed = (typed + (e.key || '')).toLowerCase().slice(-4);
+    if (typed === 'ovni') { summonUfo(); toast('🛸 Você chamou… e eles vieram.'); }
+  });
+
+  return {
+    start() {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return; // sem animações para quem pediu menos movimento
+      requestAnimationFrame(frame);
+    },
+    summonUfo, launch,
+  };
+})();
+
 /* ---------- UI wiring ---------- */
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   state.mode = b.dataset.tab;
@@ -869,6 +1099,7 @@ fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
     for (const f of features) { f.c = centroid(f); if (f.a2) byA2[f.a2] = f; }
     await applyTheme();
     buildDots();
+    Eggs.start();
     render();
     loadAll();
     setInterval(loadAll, REFRESH_MS);
