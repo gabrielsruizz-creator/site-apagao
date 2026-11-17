@@ -1,0 +1,6 @@
+{
+  "name": "site-apagao",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18" }
+}

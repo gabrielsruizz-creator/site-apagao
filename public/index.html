@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor de Apagões</title>
+<style>
+  :root{
+    --bg:#05070d; --panel:rgba(12,16,28,.88); --line:rgba(255,255,255,.09);
+    --text:#e8ecf4; --muted:#8a94a8; --ok:#3ecf8e; --warn:#f5a524; --bad:#ef4444; --accent:#60a5fa;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  #globe{position:fixed;inset:0}
+  .panel{position:fixed;top:16px;left:16px;width:360px;max-height:calc(100% - 32px);overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  h1{font-size:17px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:12px;margin:0 0 12px}
+  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+  .dot.live{background:var(--ok);box-shadow:0 0 0 0 rgba(62,207,142,.6);animation:pulse 2s infinite}
+  .dot.err{background:var(--bad)}
+  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(62,207,142,0)}100%{box-shadow:0 0 0 0 rgba(62,207,142,0)}}
+  .card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px;background:rgba(255,255,255,.03)}
+  .fact{border-color:rgba(245,165,36,.35);background:rgba(245,165,36,.07)}
+  .fact b{color:var(--warn)}
+  .fact a{color:var(--accent)}
+  .fact ul{margin:6px 0 0;padding-left:18px;font-size:12px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  .stat{border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .stat .n{font-size:22px;font-weight:650}
+  .stat .l{font-size:11px;color:var(--muted)}
+  .sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:4px 0 6px}
+  #list{list-style:none;margin:0;padding:0}
+  #list li{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer}
+  #list li:hover,#list li.sel{background:rgba(255,255,255,.06)}
+  #list .sw{width:10px;height:10px;border-radius:3px;flex:none}
+  #list .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #list .sc{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px}
+  .empty{color:var(--muted);font-size:13px;padding:6px 8px}
+  .legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin:10px 0 4px}
+  .legend .bar{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,#fde68a,#f59e0b,#dc2626,#7f1d1d)}
+  .foot{font-size:11px;color:var(--muted);margin-top:10px}
+  .foot a{color:var(--accent)}
+  button{background:rgba(255,255,255,.07);color:var(--text);border:1px solid var(--line);border-radius:8px;
+    padding:5px 10px;font:inherit;font-size:12px;cursor:pointer}
+  button:hover{background:rgba(255,255,255,.12)}
+  #detail{position:fixed;right:16px;bottom:16px;width:300px;display:none;background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;padding:14px;backdrop-filter:blur(10px)}
+  #detail h2{font-size:16px;margin:0 0 6px}
+  #detail .row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line)}
+  #detail .row span:first-child{color:var(--muted)}
+  #detail a{color:var(--accent);font-size:12px}
+  #detail .x{position:absolute;top:8px;right:10px;background:none;border:0;font-size:18px;color:var(--muted)}
+  .tip{background:rgba(10,14,24,.95);border:1px solid var(--line);padding:6px 9px;border-radius:8px;font-size:12px;color:var(--text)}
+  @media (max-width:700px){
+    .panel{top:auto;bottom:0;left:0;right:0;width:auto;max-height:46%;border-radius:14px 14px 0 0}
+    #detail{left:16px;right:16px;width:auto;top:16px;bottom:auto}
+  }
+</style>
+</head>
+<body>
+<div id="globe"></div>
+
+<aside class="panel">
+  <h1>🌍 Monitor de Apagões de Internet</h1>
+  <p class="sub">Quedas de conectividade detectadas nas últimas 24 h, por país</p>
+
+  <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Carregando dados…</span>
+    <span style="flex:1"></span><button id="refresh">Atualizar</button></div>
+
+  <div class="card fact">
+    <b>⚠️ Checagem: boato do "apagão mundial de 17/11"</b>
+    <div style="font-size:12px;margin-top:4px">Veículos de checagem e autoridades dizem que não há evidência de
+      apagão global nem de ataque cibernético coordenado. O teste de alerta da FEMA nos EUA é só um teste de transmissão.</div>
+    <ul>
+      <li><a href="https://www.cnnbrasil.com.br/economia/money/tecnologia/apagao-mundial-hoje-entenda-teoria-que-viraliza-nas-redes-sociais/" target="_blank" rel="noopener">CNN Brasil</a></li>
+      <li><a href="https://www.techtudo.com.br/noticias/2026/11/apagao-mundial-vai-acontecer-hoje-entenda-boato-que-viralizou-edsoftwares.ghtml" target="_blank" rel="noopener">TechTudo</a></li>
+      <li><a href="https://www.metropoles.com/mundo/apagao-mundial-em-17-de-novembro-o-que-ha-de-real-e-o-que-e-fake-news" target="_blank" rel="noopener">Metrópoles</a></li>
+      <li><a href="https://www.ctpost.com/news/article/fema-emergency-alert-test-cyberattack-blackout-22534888.php" target="_blank" rel="noopener">FEMA: sem apagão (CT Post)</a></li>
+    </ul>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="nCountries">–</div><div class="l">países com queda detectada</div></div>
+    <div class="stat"><div class="n" id="nEvents">–</div><div class="l">eventos registrados</div></div>
+  </div>
+
+  <div class="legend"><span>leve</span><div class="bar"></div><span>grave</span></div>
+  <div class="sec">Países afetados (maior gravidade primeiro)</div>
+  <ul id="list"><li class="empty">Carregando…</li></ul>
+
+  <div class="foot">Dados: <a href="https://ioda.inetintel.cc.gatech.edu/" target="_blank" rel="noopener">IODA</a> (Georgia Tech),
+    que mede BGP, ping ativo e telescópio de rede. Atualiza sozinho a cada 5 min.
+    Uma queda detectada aqui <b>não</b> quer dizer ataque cibernético; as causas mais comuns são falta de energia,
+    cortes de cabo e bloqueios governamentais.</div>
+</aside>
+
+<div id="detail"><button class="x" id="closeDetail" aria-label="Fechar">×</button><div id="detailBody"></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/globe.gl@2.46.2/dist/globe.gl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script>
+const NUM2A2 = {"100":"BG","104":"MM","108":"BI","112":"BY","116":"KH","120":"CM","124":"CA","132":"CV","136":"KY","140":"CF","144":"LK","148":"TD","152":"CL","156":"CN","158":"TW","162":"CX","166":"CC","170":"CO","174":"KM","175":"YT","178":"CG","180":"CD","184":"CK","188":"CR","191":"HR","192":"CU","196":"CY","203":"CZ","204":"BJ","208":"DK","212":"DM","214":"DO","218":"EC","222":"SV","226":"GQ","231":"ET","232":"ER","233":"EE","234":"FO","238":"FK","239":"GS","242":"FJ","246":"FI","248":"AX","250":"FR","254":"GF","258":"PF","260":"TF","262":"DJ","266":"GA","268":"GE","270":"GM","275":"PS","276":"DE","288":"GH","292":"GI","296":"KI","300":"GR","304":"GL","308":"GD","312":"GP","316":"GU","320":"GT","324":"GN","328":"GY","332":"HT","334":"HM","336":"VA","340":"HN","344":"HK","348":"HU","352":"IS","356":"IN","360":"ID","364":"IR","368":"IQ","372":"IE","376":"IL","380":"IT","384":"CI","388":"JM","392":"JP","398":"KZ","400":"JO","404":"KE","408":"KP","410":"KR","414":"KW","417":"KG","418":"LA","422":"LB","426":"LS","428":"LV","430":"LR","434":"LY","438":"LI","440":"LT","442":"LU","446":"MO","450":"MG","454":"MW","458":"MY","462":"MV","466":"ML","470":"MT","474":"MQ","478":"MR","480":"MU","484":"MX","492":"MC","496":"MN","498":"MD","499":"ME","500":"MS","504":"MA","508":"MZ","512":"OM","516":"NA","520":"NR","524":"NP","528":"NL","531":"CW","533":"AW","534":"SX","535":"BQ","540":"NC","548":"VU","554":"NZ","558":"NI","562":"NE","566":"NG","570":"NU","574":"NF","578":"NO","580":"MP","581":"UM","583":"FM","584":"MH","585":"PW","586":"PK","591":"PA","598":"PG","600":"PY","604":"PE","608":"PH","612":"PN","616":"PL","620":"PT","624":"GW","626":"TL","630":"PR","634":"QA","638":"RE","642":"RO","643":"RU","646":"RW","652":"BL","654":"SH","659":"KN","660":"AI","662":"LC","663":"MF","666":"PM","670":"VC","674":"SM","678":"ST","682":"SA","686":"SN","688":"RS","690":"SC","694":"SL","702":"SG","703":"SK","704":"VN","705":"SI","706":"SO","710":"ZA","716":"ZW","724":"ES","728":"SS","729":"SD","732":"EH","740":"SR","744":"SJ","748":"SZ","752":"SE","756":"CH","760":"SY","762":"TJ","764":"TH","768":"TG","772":"TK","776":"TO","780":"TT","784":"AE","788":"TN","792":"TR","795":"TM","796":"TC","798":"TV","800":"UG","804":"UA","807":"MK","818":"EG","826":"GB","831":"GG","832":"JE","833":"IM","834":"TZ","840":"US","850":"VI","854":"BF","858":"UY","860":"UZ","862":"VE","876":"WF","882":"WS","887":"YE","894":"ZM","983":"XK","004":"AF","008":"AL","012":"DZ","016":"AS","020":"AD","024":"AO","010":"AQ","028":"AG","032":"AR","051":"AM","036":"AU","040":"AT","031":"AZ","044":"BS","048":"BH","050":"BD","052":"BB","056":"BE","084":"BZ","060":"BM","064":"BT","068":"BO","070":"BA","072":"BW","074":"BV","076":"BR","086":"IO","096":"BN","090":"SB","092":"VG"};
+const IODA = 'https://api.ioda.inetintel.cc.gatech.edu/v2/outages/summary';
+const REFRESH_MS = 5 * 60 * 1000;
+const names = (() => { try { return new Intl.DisplayNames(['pt-BR'], { type: 'region' }); } catch { return null; } })();
+const ptName = (a2, fallback) => { try { return (names && names.of(a2)) || fallback || a2; } catch { return fallback || a2; } };
+
+let outages = {};          // alpha2 -> {score, events, name}
+let maxLog = 1;
+let selected = null;
+let features = [];
+
+const colorFor = (score) => {
+  if (!score) return 'rgba(70,90,130,0.55)';
+  const t = Math.min(1, Math.log10(score + 1) / maxLog);
+  const stops = [[253,230,138],[245,158,11],[220,38,38],[127,29,29]];
+  const x = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x)), f = x - i;
+  const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
+  return `rgba(${c[0]},${c[1]},${c[2]},0.92)`;
+};
+const severity = (score) => {
+  if (!score) return 'sem queda';
+  const t = Math.log10(score + 1) / maxLog;
+  return t > .75 ? 'grave' : t > .5 ? 'alta' : t > .25 ? 'moderada' : 'leve';
+};
+const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
+
+const world = Globe()(document.getElementById('globe'))
+  .backgroundColor('#05070d')
+  .showAtmosphere(true).atmosphereColor('#3b82f6').atmosphereAltitude(0.18)
+  .polygonCapColor(d => d === selected ? '#93c5fd' : colorFor(outages[d.a2]?.score))
+  .polygonSideColor(() => 'rgba(0,0,0,0.25)')
+  .polygonStrokeColor(() => 'rgba(160,180,220,0.35)')
+  .polygonAltitude(d => d === selected ? 0.05 : outages[d.a2] ? 0.012 + 0.03 * Math.log10(outages[d.a2].score + 1) / maxLog : 0.006)
+  .polygonLabel(d => {
+    const o = outages[d.a2];
+    return `<div class="tip"><b>${ptName(d.a2, d.properties.name)}</b><br>` +
+      (o ? `Queda ${severity(o.score)} · ${o.events} evento(s)` : 'Nenhuma queda detectada') + '</div>';
+  })
+  .onPolygonClick(d => select(d))
+  .polygonsTransitionDuration(400)
+  .ringColor(() => t => `rgba(239,68,68,${1 - t})`)
+  .ringMaxRadius(d => 2 + 4 * d.t).ringPropagationSpeed(2).ringRepeatPeriod(d => 1400 - 600 * d.t);
+
+const mat = world.globeMaterial();
+mat.color.set('#0b1324'); mat.emissive && mat.emissive.set('#060b16');
+world.controls().autoRotate = true;
+world.controls().autoRotateSpeed = 0.35;
+world.pointOfView({ lat: 10, lng: -40, altitude: 2.3 });
+addEventListener('resize', () => world.width(innerWidth).height(innerHeight));
+
+function centroid(f) {
+  // average of the largest ring's points (good enough to place a marker)
+  let rings = f.geometry.type === 'Polygon' ? [f.geometry.coordinates[0]] : f.geometry.coordinates.map(p => p[0]);
+  const ring = rings.sort((a, b) => b.length - a.length)[0];
+  let x = 0, y = 0; ring.forEach(([lng, lat]) => { x += lng; y += lat; });
+  return { lng: x / ring.length, lat: y / ring.length };
+}
+
+function select(f) {
+  selected = f;
+  world.polygonCapColor(world.polygonCapColor()).polygonAltitude(world.polygonAltitude());
+  document.querySelectorAll('#list li').forEach(li => li.classList.toggle('sel', li.dataset.a2 === f?.a2));
+  const box = document.getElementById('detail');
+  if (!f) { box.style.display = 'none'; return; }
+  const o = outages[f.a2];
+  const c = centroid(f);
+  world.controls().autoRotate = false;
+  world.pointOfView({ lat: c.lat, lng: c.lng, altitude: 1.6 }, 900);
+  document.getElementById('detailBody').innerHTML =
+    `<h2>${ptName(f.a2, f.properties.name)}</h2>` +
+    (o ? `<div class="row"><span>Gravidade</span><span>${severity(o.score)}</span></div>
+          <div class="row"><span>Pontuação IODA</span><span>${fmt(o.score)}</span></div>
+          <div class="row"><span>Eventos (24 h)</span><span>${o.events}</span></div>
+          ${Object.entries(o.parts).map(([k, v]) => `<div class="row"><span>${({ bgp: 'BGP (rotas)', 'ping-slash24': 'Ping ativo', 'merit-nt': 'Telescópio de rede', gtr: 'Google (tráfego)' })[k] || k}</span><span>${fmt(v)}</span></div>`).join('')}`
+       : `<div class="row"><span>Status</span><span style="color:var(--ok)">Nenhuma queda detectada</span></div>`) +
+    `<p style="margin:10px 0 0"><a href="https://ioda.inetintel.cc.gatech.edu/country/${f.a2}" target="_blank" rel="noopener">Ver gráficos no IODA ↗</a></p>`;
+  box.style.display = 'block';
+}
+document.getElementById('closeDetail').onclick = () => { select(null); world.controls().autoRotate = true; };
+
+function render() {
+  const logs = Object.values(outages).map(o => Math.log10(o.score + 1));
+  maxLog = Math.max(1, ...logs);
+  world.polygonsData(features);
+  const hot = features.filter(f => outages[f.a2]).map(f => ({ ...centroid(f), t: Math.log10(outages[f.a2].score + 1) / maxLog }));
+  world.ringsData(hot.filter(h => h.t > 0.35));
+
+  const sorted = Object.entries(outages).sort((a, b) => b[1].score - a[1].score);
+  document.getElementById('nCountries').textContent = sorted.length;
+  document.getElementById('nEvents').textContent = sorted.reduce((s, [, o]) => s + o.events, 0);
+  const list = document.getElementById('list');
+  list.innerHTML = sorted.length ? '' : '<li class="empty">Nenhuma queda de país detectada nas últimas 24 h.</li>';
+  for (const [a2, o] of sorted) {
+    const li = document.createElement('li');
+    li.dataset.a2 = a2;
+    li.innerHTML = `<span class="sw" style="background:${colorFor(o.score)}"></span><span class="nm">${ptName(a2, o.name)}</span><span class="sc">${severity(o.score)}</span>`;
+    li.onclick = () => { const f = features.find(x => x.a2 === a2); if (f) select(f); };
+    list.appendChild(li);
+  }
+}
+
+function setStatus(kind, txt) {
+  document.getElementById('dot').className = 'dot ' + kind;
+  document.getElementById('statusTxt').textContent = txt;
+}
+
+async function loadOutages() {
+  setStatus('', 'Atualizando…');
+  const until = Math.floor(Date.now() / 1000), from = until - 86400;
+  try {
+    // On Vercel, /api/outages proxies IODA; fall back to calling IODA directly (e.g. when opened as a local file)
+    let r = await fetch('/api/outages').catch(() => null);
+    if (!r || !r.ok || !(r.headers.get('content-type') || '').includes('json'))
+      r = await fetch(`${IODA}?from=${from}&until=${until}&entityType=country&limit=300`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const rows = Array.isArray(j.data) ? j.data : (j.data && Array.isArray(j.data.data) ? j.data.data : []);
+    const next = {};
+    for (const row of rows) {
+      const code = (row.entity && row.entity.code || '').toUpperCase();
+      if (!code) continue;
+      const scores = row.scores || {};
+      const parts = { ...scores }; delete parts.overall;
+      next[code] = { score: Number(scores.overall) || 0, events: Number(row.event_cnt) || 0, name: row.entity.name, parts };
+    }
+    outages = next;
+    render();
+    setStatus('live', 'Ao vivo · atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+  } catch (e) {
+    console.error(e);
+    setStatus('err', 'Não consegui acessar o IODA (' + e.message + '). Tento de novo em 5 min.');
+    if (!features.length) return;
+    render();
+  }
+}
+document.getElementById('refresh').onclick = loadOutages;
+
+fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
+  .then(r => r.json())
+  .then(topo => {
+    features = topojson.feature(topo, topo.objects.countries).features
+      .filter(f => f.properties.name !== 'Antarctica')
+      .map(f => Object.assign(f, { a2: NUM2A2[f.id] || (f.properties.name === 'Kosovo' ? 'XK' : '') }));
+    render();
+    loadOutages();
+    setInterval(loadOutages, REFRESH_MS);
+  });
+</script>
+</body>
+</html>
