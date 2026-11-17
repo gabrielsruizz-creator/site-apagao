@@ -95,6 +95,9 @@
   .seg button+button{border-left:1px solid var(--line)}
   .seg button[aria-pressed="true"]{background:var(--text);color:var(--paper)}
   .when{font-size:11px;color:var(--muted);margin:2px 0 0 18px}
+  ul.list li.grp{cursor:pointer;padding:10px 6px 6px;border-bottom:0;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:flex;gap:8px}
+  ul.list li.grp b{color:var(--text);font-weight:600}
+  ul.list li.grp span{margin-left:auto}
   .when .live{color:var(--alert)}
   .when .live::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--alert);margin-right:5px;vertical-align:1px;animation:blink 1.6s infinite}
   .sec:first-child{margin-top:0}
@@ -243,7 +246,7 @@
     <section class="pane on" id="pane-net">
       <div class="sechead">
         <div class="sec" id="netTitle">Quedas de internet</div>
-        <div class="seg" role="group" aria-label="Ordenar lista">
+        <div class="seg" role="group" aria-label="Ordenar lista" data-key="net">
           <button data-sort="recent" aria-pressed="true" title="A queda que começou por último aparece primeiro">Mais recentes</button>
           <button data-sort="severity" aria-pressed="false" title="A queda mais forte aparece primeiro">Mais graves</button>
         </div>
@@ -253,15 +256,33 @@
     </section>
 
     <section class="pane" id="pane-cyb">
-      <div class="sec">Ransomware reivindicado · 72 h · por país</div>
+      <div class="sechead">
+        <div class="sec">Ransomware · 72 h</div>
+        <div class="seg" role="group" aria-label="Ordenar lista" data-key="ransom">
+          <button data-sort="recent" aria-pressed="true" title="O país com o ataque mais recente aparece primeiro">Mais recentes</button>
+          <button data-sort="count" aria-pressed="false" title="O país com mais ataques aparece primeiro">Mais ataques</button>
+        </div>
+      </div>
       <ul class="list" id="listRansom"><li class="empty">Carregando…</li></ul>
       <p class="note">Fonte: <a href="https://www.ransomware.live/" target="_blank" rel="noopener">ransomware.live</a>. São ataques que os próprios grupos anunciam, e nem todos se confirmam. Os nomes das vítimas não são exibidos.</p>
-      <div class="sec">Notícias de ciberataques · 24 h</div>
+      <div class="sechead" style="margin-top:16px">
+        <div class="sec">Notícias · 24 h</div>
+        <div class="seg" role="group" aria-label="Ordenar lista" data-key="cybNews">
+          <button data-sort="recent" aria-pressed="true" title="A notícia mais nova aparece primeiro">Mais recentes</button>
+          <button data-sort="country" aria-pressed="false" title="Agrupa por país, com os mais citados primeiro">Por país</button>
+        </div>
+      </div>
       <ul class="list news" id="listCyberNews"><li class="empty">Carregando…</li></ul>
     </section>
 
     <section class="pane" id="pane-pwr">
-      <div class="sec">Notícias de apagões e quedas de serviço · 24 h</div>
+      <div class="sechead">
+        <div class="sec">Apagões e quedas · 24 h</div>
+        <div class="seg" role="group" aria-label="Ordenar lista" data-key="pwrNews">
+          <button data-sort="recent" aria-pressed="true" title="A notícia mais nova aparece primeiro">Mais recentes</button>
+          <button data-sort="country" aria-pressed="false" title="Agrupa por país, com os mais citados primeiro">Por país</button>
+        </div>
+      </div>
       <ul class="list news" id="listPowerNews"><li class="empty">Carregando…</li></ul>
     </section>
 
@@ -312,8 +333,10 @@ const whenRows = (t) => !t || !t.start ? [] : [
   ['Início', `${hhmm(t.start)} <span style="color:var(--muted)">(${agoSec(t.start)})</span>`],
   ['Situação', t.ongoing ? '<span style="color:var(--alert)">em andamento</span>' : `terminou às ${hhmm(t.end)}`],
 ];
-let netSort = 'recent';
-try { if (localStorage.getItem('netSort') === 'severity') netSort = 'severity'; } catch (e) {}
+// ordem escolhida em cada lista; 'recent' = ordem de acontecimento (padrão)
+const sorts = { net: 'recent', ransom: 'recent', cybNews: 'recent', pwrNews: 'recent' };
+for (const k of Object.keys(sorts)) { try { const v = localStorage.getItem('sort.' + k); if (v) sorts[k] = v; } catch (e) {} }
+const clockOf = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 const ago = (iso) => {
   const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
   return m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.round(m / 60)} h` : `há ${Math.round(m / 1440)} d`;
@@ -804,11 +827,30 @@ function fill(id, items, emptyText) {
   if (!items.length) ul.innerHTML = `<li class="empty">${emptyText}</li>`;
   items.forEach(i => ul.appendChild(i));
 }
-function newsItems(list, kind) {
-  return list.slice(0, 60).map(n => li(
+function newsItems(list, kind, mode) {
+  const items = list.slice(0, 80);
+  if (mode === 'country') {
+    // agrupa por país (mais notícias primeiro); dentro do grupo, a mais nova primeiro; sem local no fim
+    const groups = new Map();
+    for (const n of items) { const k = n.place && n.place.cc ? n.place.cc : ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(n); }
+    const order = [...groups.entries()].sort((a, b) => (a[0] === '') - (b[0] === '') || b[1].length - a[1].length);
+    const out = [];
+    for (const [cc, ns] of order) {
+      const h = document.createElement('li');
+      h.className = 'grp';
+      h.innerHTML = `<b>${cc ? esc(ptName(cc)) : 'Sem local'}</b><span>${plural(ns.length, 'notícia', 'notícias')}</span>`;
+      if (cc) h.onclick = () => showTopicCountry(cc, kind, true);
+      out.push(h, ...newsRows(ns, kind));
+    }
+    return out;
+  }
+  return newsRows(items, kind);
+}
+function newsRows(list, kind) {
+  return list.map(n => li(
     `<div class="t">${esc(n.title)}</div><div class="m">` +
     (n.place ? `<span class="pl">◎ ${esc(n.place.type === 'country' ? ptName(n.place.cc, n.place.name) : n.place.name)}</span>` : '<span>sem local</span>') +
-    `<span>${esc(n.source)}</span><span>${ago(n.date)}</span><a class="open" href="${esc(n.url)}" target="_blank" rel="noopener" title="Abrir notícia">↗</a></div>`,
+    `<span>${esc(n.source)}</span><span>${clockOf(n.date)} · ${ago(n.date)}</span><a class="open" href="${esc(n.url)}" target="_blank" rel="noopener" title="Abrir notícia">↗</a></div>`,
     () => {
       if (n.place && n.place.cc) showTopicCountry(n.place.cc, kind, true);
       else window.open(n.url, '_blank', 'noopener');
@@ -838,15 +880,15 @@ function render() {
     return { start: lastR.start, end: lastR.end, ongoing: regs.some(r => r.ongoing) };
   };
   const startOf = (a2) => (timeOf(a2) || {}).start || 0;
-  if (netSort === 'recent') allCc.sort((a, b) => startOf(b) - startOf(a) || scoreOf(b) - scoreOf(a));
+  if (sorts.net === 'recent') allCc.sort((a, b) => startOf(b) - startOf(a) || scoreOf(b) - scoreOf(a));
   else allCc.sort((a, b) => scoreOf(b) - scoreOf(a));
   document.getElementById('netTitle').textContent = 'Quedas de internet';
-  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sort === netSort)));
+  document.querySelectorAll('.seg').forEach(g => g.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sort === sorts[g.dataset.key]))));
   document.getElementById('cNet').textContent = state.errors.outages && !ctry.length ? '?' : allCc.length;
   const netItems = allCc.map(a2 => {
     const o = state.countries[a2], t = scoreOf(a2);
     const regs = state.regions.filter(r => r.cc === a2)
-      .sort(netSort === 'recent' ? (a, b) => (b.start || 0) - (a.start || 0) || b.score - a.score : (a, b) => b.score - a.score);
+      .sort(sorts.net === 'recent' ? (a, b) => (b.start || 0) - (a.start || 0) || b.score - a.score : (a, b) => b.score - a.score);
     const w = whenText(timeOf(a2));
     return li(
       `<div class="row1"><span class="sym net"></span><span class="nm">${esc(ptName(a2, o && o.name))}</span>` +
@@ -861,20 +903,25 @@ function render() {
   else fill('listNet', netItems, 'Nenhuma queda detectada nas últimas 24 h.');
 
   // Ciber
-  const rs = Object.entries(state.ransom).sort((a, b) => b[1].count - a[1].count);
+  const lastAttack = {};
+  for (const a of state.ransomAttacks || []) if (a.cc && (!lastAttack[a.cc] || a.date > lastAttack[a.cc])) lastAttack[a.cc] = a.date;
+  const rs = Object.entries(state.ransom).sort(sorts.ransom === 'recent'
+    ? (a, b) => String(lastAttack[b[0]] || '').localeCompare(String(lastAttack[a[0]] || '')) || b[1].count - a[1].count
+    : (a, b) => b[1].count - a[1].count);
   const totalRansom = rs.reduce((s, [, r]) => s + r.count, 0) + state.ransomUnknown;
   document.getElementById('cCyb').textContent = totalRansom + state.cyberNews.length || (state.errors.cyber && state.errors.news ? '?' : 0);
   const e2 = err('cyber');
   if (e2) document.getElementById('listRansom').innerHTML = e2;
   else fill('listRansom', rs.map(([a2, r]) => li(
-    `<div class="row1"><span class="sym cyb"></span><span class="nm">${esc(ptName(a2))}</span><span class="sc">${topN(r.sectors, 1).map(x => esc(x[0])).join('')}</span><span class="mono" style="min-width:22px;text-align:right">${r.count}</span></div>`,
+    `<div class="row1"><span class="sym cyb"></span><span class="nm">${esc(ptName(a2))}</span><span class="sc">${topN(r.sectors, 1).map(x => esc(x[0])).join('')}</span><span class="mono" style="min-width:22px;text-align:right">${r.count}</span></div>` +
+    (lastAttack[a2] ? `<div class="when">${r.count > 1 ? 'último ataque' : 'ataque'} ${ago(lastAttack[a2])} · ${clockOf(lastAttack[a2])}</div>` : ''),
     () => showTopicCountry(a2, 'cyb', true))).concat(state.ransomUnknown ? [li(`<div class="row1"><span class="sym cyb"></span><span class="nm">País não informado</span><span class="mono">${state.ransomUnknown}</span></div>`, () => {})] : []),
     'Nenhum ataque reivindicado nas últimas 72 h.');
   const e3 = err('news');
   if (e3) { document.getElementById('listCyberNews').innerHTML = e3; document.getElementById('listPowerNews').innerHTML = e3; }
   else {
-    fill('listCyberNews', newsItems(state.cyberNews, 'cyb'), 'Nenhuma notícia nas últimas 24 h.');
-    fill('listPowerNews', newsItems(state.powerNews, 'pwr'), 'Nenhuma notícia nas últimas 24 h.');
+    fill('listCyberNews', newsItems(state.cyberNews, 'cyb', sorts.cybNews), 'Nenhuma notícia nas últimas 24 h.');
+    fill('listPowerNews', newsItems(state.powerNews, 'pwr', sorts.pwrNews), 'Nenhuma notícia nas últimas 24 h.');
   }
   document.getElementById('cPwr').textContent = state.errors.news ? '?' : state.powerNews.length;
 }
@@ -910,6 +957,7 @@ async function loadAll() {
   if (cy.status === 'fulfilled') {
     state.ransom = cy.value.byCountry || {};
     state.ransomUnknown = (cy.value.attacks || []).filter(a => !a.cc).length;
+    state.ransomAttacks = cy.value.attacks || [];
   } else state.errors.cyber = cy.reason.message;
   if (nw.status === 'fulfilled') { state.cyberNews = nw.value.cyber || []; state.powerNews = nw.value.outage || []; }
   else state.errors.news = nw.reason.message;
@@ -1126,8 +1174,9 @@ const Eggs = (() => {
 
 /* ---------- UI wiring ---------- */
 document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
-  netSort = b.dataset.sort;
-  try { localStorage.setItem('netSort', netSort); } catch (e) {}
+  const key = b.closest('.seg').dataset.key;
+  sorts[key] = b.dataset.sort;
+  try { localStorage.setItem('sort.' + key, sorts[key]); } catch (e) {}
   render();
 });
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
