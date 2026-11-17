@@ -1,16 +1,12 @@
-// Vercel serverless function: proxies the IODA outage summary (last 24h, per country)
-// so the browser never depends on IODA's CORS settings, and caches it at the edge.
+// Quedas de internet por país nas últimas 24 h (IODA / Georgia Tech).
+import { fetchWithTimeout, sendJSON, ioda24h } from '../lib/http.js';
+
 export default async function handler(req, res) {
-  const until = Math.floor(Date.now() / 1000);
-  const from = until - 86400;
-  const url = `https://api.ioda.inetintel.cc.gatech.edu/v2/outages/summary?from=${from}&until=${until}&entityType=country&limit=300`;
   try {
-    const r = await fetch(url, { headers: { accept: 'application/json' } });
-    if (!r.ok) throw new Error(`IODA HTTP ${r.status}`);
-    const data = await r.json();
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
-    res.status(200).json(data);
+    const r = await fetchWithTimeout(ioda24h('country', 300), { timeout: 20000 });
+    const j = await r.json();
+    sendJSON(res, 200, j, 300);
   } catch (e) {
-    res.status(502).json({ error: String(e.message || e) });
+    sendJSON(res, 502, { error: String(e.message || e) });
   }
 }

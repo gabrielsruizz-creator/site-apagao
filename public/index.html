@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Monitor de Apagões</title>
+<meta name="description" content="Globo 3D com quedas de internet por país e região, ciberataques e notícias de apagões das últimas 24 horas.">
 <script>
-  // Apply saved/system theme before paint to avoid a flash
   (function () {
     let t = null;
     try { t = localStorage.getItem('theme'); } catch (e) {}
@@ -15,14 +15,14 @@
 </script>
 <style>
   :root, :root[data-theme="dark"]{
-    --bg:#000; --panel:rgba(0,0,0,.78); --line:rgba(255,255,255,.14); --line-strong:rgba(255,255,255,.45);
+    --bg:#000; --panel:rgba(0,0,0,.8); --line:rgba(255,255,255,.14); --line-strong:rgba(255,255,255,.5);
     --text:#fff; --muted:#9a9a9a; --hover:rgba(255,255,255,.08); --chip:rgba(255,255,255,.06);
-    --alert:#ff3b30;
+    --alert:#ff3b30; --ink:#fff; --paper:#000;
   }
   :root[data-theme="light"]{
-    --bg:#fff; --panel:rgba(255,255,255,.82); --line:rgba(0,0,0,.12); --line-strong:rgba(0,0,0,.5);
+    --bg:#fff; --panel:rgba(255,255,255,.85); --line:rgba(0,0,0,.12); --line-strong:rgba(0,0,0,.5);
     --text:#000; --muted:#6b6b6b; --hover:rgba(0,0,0,.06); --chip:rgba(0,0,0,.04);
-    --alert:#e0241b;
+    --alert:#e0241b; --ink:#000; --paper:#fff;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);overflow:hidden;
@@ -31,42 +31,69 @@
   a{color:var(--text);text-underline-offset:2px}
   .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 
-  .panel{position:fixed;top:16px;left:16px;width:350px;max-height:calc(100% - 32px);overflow:auto;
-    background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px;
+  .panel{position:fixed;top:16px;left:16px;width:370px;max-height:calc(100% - 32px);display:flex;flex-direction:column;
+    background:var(--panel);border:1px solid var(--line);border-radius:4px;
     backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  .head{padding:16px 16px 0}
+  .scroll{overflow:auto;padding:0 16px 16px;min-height:0}
   .top{display:flex;align-items:flex-start;gap:10px}
-  h1{font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin:0 0 4px;flex:1}
-  .sub{color:var(--muted);font-size:12px;margin:0 0 14px}
-  .status{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin-bottom:14px;
+  h1{font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:12px;margin:0 0 12px}
+  .status{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin-bottom:12px;
     text-transform:uppercase;letter-spacing:.08em}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
   .dot.live{background:var(--text);animation:blink 1.6s infinite}
   .dot.err{background:var(--alert)}
   @keyframes blink{50%{opacity:.25}}
 
-  .card{border:1px solid var(--line);border-radius:4px;padding:12px;margin-bottom:14px}
-  .card b{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
-  .card p{font-size:12px;margin:0;color:var(--muted)}
-  .card ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}
-  .card li a{display:inline-block;font-size:11px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;text-decoration:none}
-  .card li a:hover{border-color:var(--line-strong)}
+  /* layer toggles */
+  .layers{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+  .layer{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 9px;text-transform:none;letter-spacing:0}
+  .layer .k{display:flex;align-items:center;gap:6px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .layer .v{font-size:20px;font-weight:300;line-height:1.1}
+  .layer[aria-pressed="false"]{opacity:.45}
+  .layer[aria-pressed="false"] .v{text-decoration:line-through}
 
-  .stats{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:4px;margin-bottom:14px}
-  .stat{padding:10px 12px}
-  .stat+.stat{border-left:1px solid var(--line)}
-  .stat .n{font-size:28px;font-weight:300;line-height:1.1}
-  .stat .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .sym{display:inline-block;flex:none}
+  .sym.net{width:8px;height:8px;border-radius:50%;background:var(--alert)}
+  .sym.cyb{width:8px;height:8px;border:1.5px solid var(--ink);transform:rotate(45deg)}
+  .sym.pwr{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--ink)}
 
-  .sec{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:4px 0 6px}
-  #list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
-  #list li{display:flex;align-items:center;gap:10px;padding:8px 6px;cursor:pointer;border-bottom:1px solid var(--line)}
-  #list li:hover,#list li.sel{background:var(--hover)}
-  #list .sw{width:6px;height:6px;border-radius:50%;background:var(--alert);flex:none}
-  #list .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #list .sc{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
-  #list .bar{width:46px;height:3px;background:var(--line);flex:none;position:relative}
-  #list .bar i{position:absolute;inset:0 auto 0 0;background:var(--text)}
+  .tabs{display:flex;border-bottom:1px solid var(--line);margin:0 -16px;padding:0 16px}
+  .tab{flex:1;background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:9px 4px;color:var(--muted)}
+  .tab[aria-selected="true"]{color:var(--text);border-bottom-color:var(--text)}
+  .pane{display:none;padding-top:12px}
+  .pane.on{display:block}
+
+  details.fact{border:1px solid var(--line);border-radius:4px;padding:10px 12px;margin:12px 0 0}
+  details.fact summary{cursor:pointer;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;list-style:none}
+  details.fact summary::-webkit-details-marker{display:none}
+  details.fact summary::after{content:"+";float:right;color:var(--muted)}
+  details.fact[open] summary::after{content:"–"}
+  details.fact p{font-size:12px;margin:8px 0 0;color:var(--muted)}
+  .chips{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+  .chips a{display:inline-block;font-size:11px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;text-decoration:none}
+  .chips a:hover{border-color:var(--line-strong)}
+
+  .sec{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:14px 0 6px}
+  .sec:first-child{margin-top:0}
+  ul.list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+  ul.list li{padding:8px 6px;border-bottom:1px solid var(--line);cursor:pointer}
+  ul.list li:hover,ul.list li.sel{background:var(--hover)}
+  .row1{display:flex;align-items:center;gap:10px}
+  .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sc{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);white-space:nowrap}
+  .bar{width:46px;height:3px;background:var(--line);flex:none;position:relative}
+  .bar i{position:absolute;inset:0 auto 0 0;background:var(--text)}
+  .subrows{margin:4px 0 0 18px;font-size:12px;color:var(--muted)}
+  .subrows div{display:flex;justify-content:space-between;gap:8px}
+  .news .t{font-size:13px;line-height:1.35}
+  .news .m{display:flex;gap:8px;font-size:11px;color:var(--muted);margin-top:3px;flex-wrap:wrap}
+  .news .m .pl{color:var(--text)}
+  .news .open{margin-left:auto;text-decoration:none;color:var(--muted)}
+  .news .open:hover{color:var(--text)}
   .empty{color:var(--muted);font-size:13px;padding:8px 6px;cursor:default!important}
+  .note{font-size:11px;color:var(--muted);margin:8px 0 0}
   .foot{font-size:11px;color:var(--muted);margin-top:14px}
 
   button{background:var(--chip);color:var(--text);border:1px solid var(--line);border-radius:4px;
@@ -76,17 +103,41 @@
   #theme svg{width:15px;height:15px}
   :root[data-theme="dark"] .i-sun, :root[data-theme="light"] .i-moon{display:none}
 
-  #detail{position:fixed;right:16px;bottom:16px;width:290px;display:none;background:var(--panel);
+  #detail{position:fixed;right:16px;bottom:16px;width:320px;max-height:60%;overflow:auto;display:none;background:var(--panel);
     border:1px solid var(--line);border-radius:4px;padding:16px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
-  #detail h2{font-size:18px;font-weight:400;margin:0 0 10px}
-  #detail .row{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--line)}
+  #detail .kind{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);display:flex;align-items:center;gap:6px}
+  #detail h2{font-size:18px;font-weight:400;margin:4px 0 10px;padding-right:20px}
+  #detail .row{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--line)}
   #detail .row span:first-child{color:var(--muted)}
   #detail .x{position:absolute;top:10px;right:10px;border:0;background:none;font-size:18px;padding:0 4px;text-transform:none}
+  #detail .hl{font-size:13px;padding:7px 0;border-bottom:1px solid var(--line)}
+  #detail .hl a{text-decoration:none}
+  #detail .hl a:hover{text-decoration:underline}
+  #detail .hl small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+
   .tip{background:var(--panel);border:1px solid var(--line);padding:6px 9px;border-radius:4px;font-size:12px;color:var(--text)}
   .tip .a{color:var(--alert)}
+
+  /* globe markers (globe.gl controls the wrapper's transform, so the shape lives in a child) */
+  .mk{position:relative;cursor:pointer;pointer-events:auto;transition:opacity .25s;display:grid;place-items:center;width:18px;height:18px}
+  .mk.hide{opacity:0;pointer-events:none}
+  .mk:hover{z-index:5}
+  .mk .shp{display:block;position:relative}
+  .mk.net .shp{width:var(--s);height:var(--s);border-radius:50%;background:var(--alert);box-shadow:0 0 0 1.5px var(--paper)}
+  .mk.net .shp::after{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--alert);animation:ping 2s infinite}
+  @keyframes ping{from{transform:scale(1);opacity:.9}to{transform:scale(3);opacity:0}}
+  .mk.cyb .shp{width:10px;height:10px;background:var(--paper);border:1.5px solid var(--ink);transform:rotate(45deg)}
+  .mk.cyb.big .shp{width:13px;height:13px;background:var(--ink);box-shadow:0 0 0 1.5px var(--paper)}
+  .mk.pwr .shp{width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid var(--ink);
+    filter:drop-shadow(0 0 1.5px var(--paper))}
+  .mk .n{position:absolute;left:15px;top:-6px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--text);
+    background:var(--panel);border:1px solid var(--line);padding:2px 4px;border-radius:3px;white-space:nowrap}
+  .mk .lbl{display:none;position:absolute;left:18px;top:12px;white-space:nowrap;font-size:11px}
+  .mk:hover .lbl{display:block}
+
   @media (max-width:700px){
-    .panel{top:auto;bottom:0;left:0;right:0;width:auto;max-height:46%;border-radius:4px 4px 0 0}
-    #detail{left:16px;right:16px;width:auto;top:16px;bottom:auto}
+    .panel{top:auto;bottom:0;left:0;right:0;width:auto;max-height:52%;border-radius:4px 4px 0 0}
+    #detail{left:16px;right:16px;width:auto;top:16px;bottom:auto;max-height:40%}
   }
 </style>
 </head>
@@ -94,43 +145,71 @@
 <div id="globe"></div>
 
 <aside class="panel">
-  <div class="top">
-    <div style="flex:1">
-      <h1>Monitor de apagões</h1>
-      <p class="sub">Quedas de internet detectadas nas últimas 24 h, por país</p>
+  <div class="head">
+    <div class="top">
+      <div style="flex:1">
+        <h1>Monitor de apagões</h1>
+        <p class="sub">Internet, ciberataques e apagões nas últimas 24 h</p>
+      </div>
+      <button id="theme" aria-label="Alternar tema claro/escuro" title="Alternar tema">
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
     </div>
-    <button id="theme" aria-label="Alternar tema claro/escuro" title="Alternar tema">
-      <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-      <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-    </button>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Carregando…</span>
+      <span style="flex:1"></span><button id="refresh">Atualizar</button></div>
+
+    <div class="layers">
+      <button class="layer" data-layer="net" aria-pressed="true" title="Mostrar/ocultar no globo">
+        <span class="k"><span class="sym net"></span>Internet</span><span class="v" id="cNet">–</span></button>
+      <button class="layer" data-layer="cyb" aria-pressed="true" title="Mostrar/ocultar no globo">
+        <span class="k"><span class="sym cyb"></span>Ciber</span><span class="v" id="cCyb">–</span></button>
+      <button class="layer" data-layer="pwr" aria-pressed="true" title="Mostrar/ocultar no globo">
+        <span class="k"><span class="sym pwr"></span>Apagões</span><span class="v" id="cPwr">–</span></button>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="net" aria-selected="true">Internet</button>
+      <button class="tab" role="tab" data-tab="cyb" aria-selected="false">Ciberataques</button>
+      <button class="tab" role="tab" data-tab="pwr" aria-selected="false">Apagões</button>
+    </div>
   </div>
 
-  <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Carregando…</span>
-    <span style="flex:1"></span><button id="refresh">Atualizar</button></div>
+  <div class="scroll">
+    <section class="pane on" id="pane-net">
+      <div class="sec">Países e regiões com queda · por gravidade</div>
+      <ul class="list" id="listNet"><li class="empty">Carregando…</li></ul>
+      <p class="note">Fonte: <a href="https://ioda.inetintel.cc.gatech.edu/" target="_blank" rel="noopener">IODA</a> (Georgia Tech), que mede rotas BGP, ping ativo e tráfego. As regiões são estados e províncias.</p>
+    </section>
 
-  <div class="card">
-    <b>Checagem · boato de 17/11</b>
-    <p>Não há evidência de apagão mundial nem de ataque cibernético coordenado. Autoridades e checadores
-      desmentiram o boato, e o alerta da FEMA nos EUA é só um teste de transmissão.</p>
-    <ul>
-      <li><a href="https://www.cnnbrasil.com.br/economia/money/tecnologia/apagao-mundial-hoje-entenda-teoria-que-viraliza-nas-redes-sociais/" target="_blank" rel="noopener">CNN Brasil</a></li>
-      <li><a href="https://www.techtudo.com.br/noticias/2026/11/apagao-mundial-vai-acontecer-hoje-entenda-boato-que-viralizou-edsoftwares.ghtml" target="_blank" rel="noopener">TechTudo</a></li>
-      <li><a href="https://www.metropoles.com/mundo/apagao-mundial-em-17-de-novembro-o-que-ha-de-real-e-o-que-e-fake-news" target="_blank" rel="noopener">Metrópoles</a></li>
-      <li><a href="https://www.ctpost.com/news/article/fema-emergency-alert-test-cyberattack-blackout-22534888.php" target="_blank" rel="noopener">FEMA</a></li>
-    </ul>
+    <section class="pane" id="pane-cyb">
+      <div class="sec">Ransomware reivindicado · 72 h · por país</div>
+      <ul class="list" id="listRansom"><li class="empty">Carregando…</li></ul>
+      <p class="note">Fonte: <a href="https://www.ransomware.live/" target="_blank" rel="noopener">ransomware.live</a>. São ataques que os próprios grupos anunciam, e nem todos se confirmam. Os nomes das vítimas não são exibidos.</p>
+      <div class="sec">Notícias de ciberataques · 24 h</div>
+      <ul class="list news" id="listCyberNews"><li class="empty">Carregando…</li></ul>
+    </section>
+
+    <section class="pane" id="pane-pwr">
+      <div class="sec">Notícias de apagões e quedas de serviço · 24 h</div>
+      <ul class="list news" id="listPowerNews"><li class="empty">Carregando…</li></ul>
+    </section>
+
+    <p class="note">O local das notícias é estimado pelo país ou cidade citado na manchete (Google News), então pode ser aproximado.</p>
+
+    <details class="fact">
+      <summary>Checagem · boato de 17/11</summary>
+      <p>Não há evidência de apagão mundial nem de ataque cibernético coordenado. Autoridades e checadores
+        desmentiram o boato, e o alerta da FEMA nos EUA é só um teste de transmissão.</p>
+      <ul class="chips">
+        <li><a href="https://www.cnnbrasil.com.br/economia/money/tecnologia/apagao-mundial-hoje-entenda-teoria-que-viraliza-nas-redes-sociais/" target="_blank" rel="noopener">CNN Brasil</a></li>
+        <li><a href="https://www.techtudo.com.br/noticias/2026/11/apagao-mundial-vai-acontecer-hoje-entenda-boato-que-viralizou-edsoftwares.ghtml" target="_blank" rel="noopener">TechTudo</a></li>
+        <li><a href="https://www.metropoles.com/mundo/apagao-mundial-em-17-de-novembro-o-que-ha-de-real-e-o-que-e-fake-news" target="_blank" rel="noopener">Metrópoles</a></li>
+        <li><a href="https://www.ctpost.com/news/article/fema-emergency-alert-test-cyberattack-blackout-22534888.php" target="_blank" rel="noopener">FEMA</a></li>
+      </ul>
+    </details>
+    <p class="foot">Atualiza sozinho a cada 5 min. Uma queda de internet <b>não</b> quer dizer ataque cibernético; as causas mais comuns são falta de energia, cortes de cabo e bloqueios governamentais.</p>
   </div>
-
-  <div class="stats">
-    <div class="stat"><div class="n" id="nCountries">–</div><div class="l">países com queda</div></div>
-    <div class="stat"><div class="n" id="nEvents">–</div><div class="l">eventos</div></div>
-  </div>
-
-  <div class="sec">Países afetados · por gravidade</div>
-  <ul id="list"><li class="empty">Carregando…</li></ul>
-
-  <div class="foot">Dados: <a href="https://ioda.inetintel.cc.gatech.edu/" target="_blank" rel="noopener">IODA</a> (Georgia Tech).
-    Atualiza a cada 5 min. Uma queda detectada <b>não</b> quer dizer ataque cibernético; as causas mais comuns
-    são falta de energia, cortes de cabo e bloqueios governamentais.</div>
 </aside>
 
 <div id="detail"><button class="x" id="closeDetail" aria-label="Fechar">×</button><div id="detailBody"></div></div>
@@ -139,44 +218,47 @@
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script>
 const NUM2A2 = {"100":"BG","104":"MM","108":"BI","112":"BY","116":"KH","120":"CM","124":"CA","132":"CV","136":"KY","140":"CF","144":"LK","148":"TD","152":"CL","156":"CN","158":"TW","162":"CX","166":"CC","170":"CO","174":"KM","175":"YT","178":"CG","180":"CD","184":"CK","188":"CR","191":"HR","192":"CU","196":"CY","203":"CZ","204":"BJ","208":"DK","212":"DM","214":"DO","218":"EC","222":"SV","226":"GQ","231":"ET","232":"ER","233":"EE","234":"FO","238":"FK","239":"GS","242":"FJ","246":"FI","248":"AX","250":"FR","254":"GF","258":"PF","260":"TF","262":"DJ","266":"GA","268":"GE","270":"GM","275":"PS","276":"DE","288":"GH","292":"GI","296":"KI","300":"GR","304":"GL","308":"GD","312":"GP","316":"GU","320":"GT","324":"GN","328":"GY","332":"HT","334":"HM","336":"VA","340":"HN","344":"HK","348":"HU","352":"IS","356":"IN","360":"ID","364":"IR","368":"IQ","372":"IE","376":"IL","380":"IT","384":"CI","388":"JM","392":"JP","398":"KZ","400":"JO","404":"KE","408":"KP","410":"KR","414":"KW","417":"KG","418":"LA","422":"LB","426":"LS","428":"LV","430":"LR","434":"LY","438":"LI","440":"LT","442":"LU","446":"MO","450":"MG","454":"MW","458":"MY","462":"MV","466":"ML","470":"MT","474":"MQ","478":"MR","480":"MU","484":"MX","492":"MC","496":"MN","498":"MD","499":"ME","500":"MS","504":"MA","508":"MZ","512":"OM","516":"NA","520":"NR","524":"NP","528":"NL","531":"CW","533":"AW","534":"SX","535":"BQ","540":"NC","548":"VU","554":"NZ","558":"NI","562":"NE","566":"NG","570":"NU","574":"NF","578":"NO","580":"MP","581":"UM","583":"FM","584":"MH","585":"PW","586":"PK","591":"PA","598":"PG","600":"PY","604":"PE","608":"PH","612":"PN","616":"PL","620":"PT","624":"GW","626":"TL","630":"PR","634":"QA","638":"RE","642":"RO","643":"RU","646":"RW","652":"BL","654":"SH","659":"KN","660":"AI","662":"LC","663":"MF","666":"PM","670":"VC","674":"SM","678":"ST","682":"SA","686":"SN","688":"RS","690":"SC","694":"SL","702":"SG","703":"SK","704":"VN","705":"SI","706":"SO","710":"ZA","716":"ZW","724":"ES","728":"SS","729":"SD","732":"EH","740":"SR","744":"SJ","748":"SZ","752":"SE","756":"CH","760":"SY","762":"TJ","764":"TH","768":"TG","772":"TK","776":"TO","780":"TT","784":"AE","788":"TN","792":"TR","795":"TM","796":"TC","798":"TV","800":"UG","804":"UA","807":"MK","818":"EG","826":"GB","831":"GG","832":"JE","833":"IM","834":"TZ","840":"US","850":"VI","854":"BF","858":"UY","860":"UZ","862":"VE","876":"WF","882":"WS","887":"YE","894":"ZM","983":"XK","004":"AF","008":"AL","012":"DZ","016":"AS","020":"AD","024":"AO","010":"AQ","028":"AG","032":"AR","051":"AM","036":"AU","040":"AT","031":"AZ","044":"BS","048":"BH","050":"BD","052":"BB","056":"BE","084":"BZ","060":"BM","064":"BT","068":"BO","070":"BA","072":"BW","074":"BV","076":"BR","086":"IO","096":"BN","090":"SB","092":"VG"};
-const IODA = 'https://api.ioda.inetintel.cc.gatech.edu/v2/outages/summary';
 const REFRESH_MS = 5 * 60 * 1000;
 const names = (() => { try { return new Intl.DisplayNames(['pt-BR'], { type: 'region' }); } catch { return null; } })();
 const ptName = (a2, fallback) => { try { return (names && a2 && names.of(a2)) || fallback || a2; } catch { return fallback || a2; } };
-const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const isDark = () => document.documentElement.dataset.theme !== 'light';
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
+const ago = (iso) => {
+  const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+  return m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.round(m / 60)} h` : `há ${Math.round(m / 1440)} d`;
+};
+const METHOD = { bgp: 'BGP (rotas)', 'ping-slash24': 'Ping ativo', 'merit-nt': 'Telescópio de rede', gtr: 'Google (tráfego)' };
+const methodName = (k) => METHOD[k.split('.')[0]] || k;
 
-let outages = {};          // alpha2 -> {score, events, name, parts}
-let maxLog = 1;
+/* ---------- state ---------- */
+const state = {
+  countries: {},   // a2 -> {score, events, name, parts}
+  regions: [],     // {code,name,cc,lat,lng,score,events,parts}
+  ransom: {},      // a2 -> {count, groups, sectors}
+  ransomUnknown: 0,
+  cyberNews: [], powerNews: [],
+  layers: { net: true, cyb: true, pwr: true },
+  errors: {},
+};
+let maxLog = 1, regMaxLog = 1;
 let selected = null;
-let features = [];         // country features (for interaction)
-let allFeatures = [];      // incl. Antarctica (for the texture)
-let coastLines = [];       // exterior arcs only (coastlines, no internal borders)
+let features = [], allFeatures = [], coastLines = [], byA2 = {};
 let textureUrl = null;
 
-const norm = (score) => score ? Math.min(1, Math.log10(score + 1) / maxLog) : 0;
-const severity = (score) => {
-  if (!score) return 'sem queda';
-  const t = norm(score);
-  return t > .75 ? 'grave' : t > .5 ? 'alta' : t > .25 ? 'moderada' : 'leve';
-};
-const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
+const norm = (score, max = maxLog) => score ? Math.min(1, Math.log10(score + 1) / max) : 0;
+const severity = (t) => t > .75 ? 'grave' : t > .5 ? 'alta' : t > .25 ? 'moderada' : 'leve';
 const alertRGBA = (a) => (isDark() ? `rgba(255,59,48,${a})` : `rgba(224,36,27,${a})`);
 
-/* ---------- Dotted globe texture (equirectangular canvas) ---------- */
+/* ---------- dotted globe texture ---------- */
 function buildTexture() {
-  const W = 8192, H = 4096;
-  const dark = isDark();
-  const ink = dark ? '#ffffff' : '#000000';
-  const paper = dark ? '#000000' : '#ffffff';
-  const px = (lng) => (lng + 180) / 360 * W;
-  const py = (lat) => (90 - lat) / 180 * H;
-
-  // Trace each ring, unwrapping across the antimeridian, then draw at x offsets -W, 0, +W.
+  const W = 8192, H = 4096, dark = isDark();
+  const ink = dark ? '#ffffff' : '#000000', paper = dark ? '#000000' : '#ffffff';
+  const px = (lng) => (lng + 180) / 360 * W, py = (lat) => (90 - lat) / 180 * H;
   const ringsOf = (f) => f.geometry.type === 'Polygon' ? f.geometry.coordinates : f.geometry.coordinates.flat();
-  const tracePath = (ctx, offset) => {
+  const trace = (ctx, lines, offset, close) => {
     ctx.beginPath();
-    for (const f of allFeatures) for (const ring of ringsOf(f)) {
+    for (const ring of lines) {
       let prev = null, shift = 0;
       ring.forEach(([lng, lat], i) => {
         if (prev !== null) { const d = lng - prev; if (d > 180) shift -= 360; else if (d < -180) shift += 360; }
@@ -184,85 +266,67 @@ function buildTexture() {
         const x = px(lng + shift) + offset, y = py(lat);
         i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
       });
-      ctx.closePath();
+      if (close) ctx.closePath();
     }
   };
-
-  // Land mask
+  const landRings = allFeatures.flatMap(ringsOf);
   const mask = document.createElement('canvas'); mask.width = W / 4; mask.height = H / 4;
   const m = mask.getContext('2d', { willReadFrequently: true });
   m.scale(0.25, 0.25); m.fillStyle = '#fff';
-  for (const o of [-W, 0, W]) { tracePath(m, o); m.fill('evenodd'); }
+  for (const o of [-W, 0, W]) { trace(m, landRings, o, true); m.fill('evenodd'); }
   const md = m.getImageData(0, 0, mask.width, mask.height).data;
   const isLand = (x, y) => md[((Math.min(mask.height - 1, y >> 2) * mask.width) + Math.min(mask.width - 1, x >> 2)) * 4] > 127;
 
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const ctx = c.getContext('2d');
   ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
-
-  // Dots: spacing is constant on the sphere (x-step widens toward the poles).
-  const drawDots = (step, r, alpha, wantLand) => {
+  const dots = (step, r, alpha, wantLand) => {
     ctx.fillStyle = ink; ctx.globalAlpha = alpha;
     for (let y = step / 2; y < H; y += step) {
       const lat = 90 - y / H * 180;
-      const k = Math.max(0.08, Math.cos(lat * Math.PI / 180));
-      const sx = step / k;
-      const off = (Math.round(y / step) % 2) * sx / 2;
-      for (let x = off; x < W; x += sx) {
+      const sx = step / Math.max(0.08, Math.cos(lat * Math.PI / 180));
+      for (let x = (Math.round(y / step) % 2) * sx / 2; x < W; x += sx) {
         if (isLand(x | 0, y | 0) !== wantLand) continue;
         ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
       }
     }
   };
-  drawDots(15, 2.6, dark ? 0.95 : 0.85, true);   // dense land
-  drawDots(46, 3.2, dark ? 0.75 : 0.5, false);   // sparse ocean
+  dots(15, 2.6, dark ? 0.95 : 0.85, true);
+  dots(46, 3.2, dark ? 0.75 : 0.5, false);
   ctx.globalAlpha = 1;
-
-  // Coastlines: soft glow + crisp line
-  const traceLines = (offset) => {
-    ctx.beginPath();
-    for (const line of coastLines) {
-      let prev = null, shift = 0;
-      line.forEach(([lng, lat], i) => {
-        if (prev !== null) { const d = lng - prev; if (d > 180) shift -= 360; else if (d < -180) shift += 360; }
-        prev = lng;
-        const x = px(lng + shift) + offset, y = py(lat);
-        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-      });
-    }
-  };
-  ctx.strokeStyle = ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.strokeStyle = ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 3;
   if (dark) { ctx.shadowColor = 'rgba(255,255,255,.85)'; ctx.shadowBlur = 10; }
-  ctx.lineWidth = 3;
-  for (const o of [-W, 0, W]) { traceLines(o); ctx.stroke(); }
+  for (const o of [-W, 0, W]) { trace(ctx, coastLines, o, false); ctx.stroke(); }
   ctx.shadowBlur = 0;
-
   return new Promise(res => c.toBlob(b => {
     if (textureUrl) URL.revokeObjectURL(textureUrl);
     textureUrl = URL.createObjectURL(b); res(textureUrl);
   }));
 }
 
-/* ---------- Globe ---------- */
+/* ---------- globe ---------- */
 const world = Globe()(document.getElementById('globe'))
   .showAtmosphere(true).atmosphereAltitude(0.16)
   .polygonCapColor(d => {
-    const o = outages[d.a2];
-    if (d === selected) return isDark() ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)';
-    return o ? alertRGBA(0.25 + 0.55 * norm(o.score)) : 'rgba(0,0,0,0)';
+    const o = state.layers.net && state.countries[d.a2];
+    if (d === selected) return isDark() ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)';
+    return o ? alertRGBA(0.18 + 0.5 * norm(o.score)) : 'rgba(0,0,0,0)';
   })
-  .polygonSideColor(d => outages[d.a2] ? alertRGBA(0.35) : 'rgba(0,0,0,0)')
-  .polygonStrokeColor(d => outages[d.a2] ? alertRGBA(0.95) : (d === selected ? css('--text') : 'rgba(0,0,0,0)'))
-  .polygonAltitude(d => d === selected ? 0.03 : outages[d.a2] ? 0.006 + 0.02 * norm(outages[d.a2].score) : 0.002)
+  .polygonSideColor(d => state.layers.net && state.countries[d.a2] ? alertRGBA(0.3) : 'rgba(0,0,0,0)')
+  .polygonStrokeColor(d => state.layers.net && state.countries[d.a2] ? alertRGBA(0.9) : (d === selected ? (isDark() ? '#fff' : '#000') : 'rgba(0,0,0,0)'))
+  .polygonAltitude(d => d === selected ? 0.02 : state.layers.net && state.countries[d.a2] ? 0.005 + 0.012 * norm(state.countries[d.a2].score) : 0.002)
   .polygonLabel(d => {
-    const o = outages[d.a2];
-    return `<div class="tip"><b>${ptName(d.a2, d.properties.name)}</b><br>` +
-      (o ? `<span class="a">●</span> Queda ${severity(o.score)} · ${o.events} evento(s)` : 'Nenhuma queda detectada') + '</div>';
+    const o = state.countries[d.a2], r = state.ransom[d.a2];
+    return `<div class="tip"><b>${esc(ptName(d.a2, d.properties.name))}</b><br>` +
+      (o ? `<span class="a">●</span> Internet: queda ${severity(norm(o.score))}<br>` : 'Internet: sem queda detectada<br>') +
+      (r ? `◆ ${r.count} ataque(s) de ransomware (72 h)` : '') + '</div>';
   })
-  .onPolygonClick(d => select(d))
-  .polygonsTransitionDuration(400)
-  .ringColor(() => t => alertRGBA(1 - t))
-  .ringMaxRadius(d => 2 + 4 * d.t).ringPropagationSpeed(2).ringRepeatPeriod(d => 1400 - 600 * d.t);
+  .onPolygonClick(d => showCountry(d, true))
+  .polygonsTransitionDuration(300)
+  .htmlElementsData([])
+  .htmlLat('lat').htmlLng('lng').htmlAltitude(0.01)
+  .htmlElement(d => d.el)
+  .htmlElementVisibilityModifier((el, visible) => el.classList.toggle('hide', !visible));
 
 world.controls().autoRotate = true;
 world.controls().autoRotateSpeed = 0.4;
@@ -273,9 +337,9 @@ async function applyTheme() {
   const dark = isDark();
   world.backgroundColor(dark ? '#000000' : '#ffffff').atmosphereColor(dark ? '#ffffff' : '#9a9a9a');
   if (allFeatures.length) world.globeImageUrl(await buildTexture());
-  refreshStyles();
+  refreshPolys();
 }
-function refreshStyles() {
+function refreshPolys() {
   world.polygonCapColor(world.polygonCapColor()).polygonSideColor(world.polygonSideColor())
     .polygonStrokeColor(world.polygonStrokeColor()).polygonAltitude(world.polygonAltitude());
 }
@@ -283,96 +347,266 @@ document.getElementById('theme').onclick = () => {
   const next = isDark() ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem('theme', next); } catch (e) {}
-  applyTheme(); render();
+  applyTheme();
 };
 
 function centroid(f) {
-  const rings = f.geometry.type === 'Polygon' ? [f.geometry.coordinates[0]] : f.geometry.coordinates.map(p => p[0]);
-  const ring = rings.sort((a, b) => b.length - a.length)[0];
-  let x = 0, y = 0; ring.forEach(([lng, lat]) => { x += lng; y += lat; });
-  return { lng: x / ring.length, lat: y / ring.length };
+  const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+  let best = null, ba = -1;
+  for (const p of polys) {
+    const r = p[0]; let a = 0, cx = 0, cy = 0;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const k = r[j][0] * r[i][1] - r[i][0] * r[j][1]; a += k; cx += (r[j][0] + r[i][0]) * k; cy += (r[j][1] + r[i][1]) * k;
+    }
+    if (Math.abs(a) > ba) { ba = Math.abs(a); best = a ? { lat: cy / (3 * a), lng: cx / (3 * a) } : { lat: r[0][1], lng: r[0][0] }; }
+  }
+  return best;
+}
+function flyTo(lat, lng, altitude = 1.5) {
+  world.controls().autoRotate = false;
+  world.pointOfView({ lat, lng, altitude }, 900);
 }
 
-function select(f) {
-  selected = f;
-  refreshStyles();
-  document.querySelectorAll('#list li').forEach(li => li.classList.toggle('sel', !!f && li.dataset.a2 === f.a2));
-  const box = document.getElementById('detail');
-  if (!f) { box.style.display = 'none'; return; }
-  const o = outages[f.a2];
-  const c = centroid(f);
-  world.controls().autoRotate = false;
-  world.pointOfView({ lat: c.lat, lng: c.lng, altitude: 1.6 }, 900);
-  const label = { bgp: 'BGP (rotas)', 'ping-slash24': 'Ping ativo', 'merit-nt': 'Telescópio de rede', gtr: 'Google (tráfego)' };
-  document.getElementById('detailBody').innerHTML =
-    `<h2>${ptName(f.a2, f.properties.name)}</h2>` +
-    (o ? `<div class="row"><span>Gravidade</span><span style="color:var(--alert)">${severity(o.score)}</span></div>
-          <div class="row"><span>Pontuação IODA</span><span class="mono">${fmt(o.score)}</span></div>
-          <div class="row"><span>Eventos (24 h)</span><span class="mono">${o.events}</span></div>
-          ${Object.entries(o.parts).map(([k, v]) => `<div class="row"><span>${label[k] || k}</span><span class="mono">${fmt(v)}</span></div>`).join('')}`
-       : `<div class="row"><span>Status</span><span>Nenhuma queda detectada</span></div>`) +
-    `<p style="margin:12px 0 0;font-size:12px"><a href="https://ioda.inetintel.cc.gatech.edu/country/${f.a2}" target="_blank" rel="noopener">Ver gráficos no IODA ↗</a></p>`;
-  box.style.display = 'block';
+/* ---------- markers ---------- */
+function marker(cls, title, onClick, extra = '') {
+  const el = document.createElement('div');
+  el.className = 'mk ' + cls;
+  el.innerHTML = `<span class="shp"></span>` + extra + `<span class="lbl tip">${esc(title)}</span>`;
+  el.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+  return el;
 }
-document.getElementById('closeDetail').onclick = () => { select(null); world.controls().autoRotate = true; };
+function buildMarkers() {
+  const out = [];
+  if (state.layers.net) {
+    for (const r of state.regions) {
+      const t = norm(r.score, regMaxLog);
+      const el = marker('net', `${r.name}, ${ptName(r.cc)} · queda ${severity(t)}`, () => showRegion(r));
+      el.style.setProperty('--s', (6 + 8 * t).toFixed(1) + 'px');
+      out.push({ lat: r.lat, lng: r.lng, el });
+    }
+  }
+  if (state.layers.cyb) {
+    for (const [a2, r] of Object.entries(state.ransom)) {
+      const f = byA2[a2]; if (!f) continue;
+      const c = f.c;
+      out.push({ lat: c.lat, lng: c.lng, el: marker('cyb big', `${ptName(a2)} · ${r.count} ataque(s) de ransomware`, () => showRansom(a2), `<span class="n">${r.count}</span>`) });
+    }
+    for (const g of groupByPlace(state.cyberNews)) {
+      out.push({ lat: g.lat + 0.6, lng: g.lng + 0.6, el: marker('cyb', `${g.name} · ${g.items.length} notícia(s) de ciberataque`, () => showNews(g, 'cyb')) });
+    }
+  }
+  if (state.layers.pwr) {
+    for (const g of groupByPlace(state.powerNews)) {
+      out.push({ lat: g.lat - 0.6, lng: g.lng - 0.6, el: marker('pwr', `${g.name} · ${g.items.length} notícia(s) de apagão`, () => showNews(g, 'pwr')) });
+    }
+  }
+  world.htmlElementsData(out);
+}
+function groupByPlace(items) {
+  const m = new Map();
+  for (const it of items) {
+    if (!it.place) continue;
+    const k = it.place.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    // nomes diferentes do mesmo país (Brasil/Brazil, EUA/U.S.) caem no mesmo grupo
+    const key = it.place.type === 'country' ? 'c:' + it.place.cc : 'p:' + k;
+    if (!m.has(key)) m.set(key, { name: it.place.type === 'country' ? ptName(it.place.cc, it.place.name) : it.place.name, cc: it.place.cc, lat: it.place.lat, lng: it.place.lng, items: [] });
+    m.get(key).items.push(it);
+  }
+  return [...m.values()];
+}
+
+/* ---------- detail card ---------- */
+const detail = document.getElementById('detail');
+function openDetail(html) {
+  document.getElementById('detailBody').innerHTML = html;
+  detail.style.display = 'block';
+}
+function closeDetail() {
+  detail.style.display = 'none';
+  selected = null; refreshPolys();
+  document.querySelectorAll('ul.list li.sel').forEach(li => li.classList.remove('sel'));
+}
+document.getElementById('closeDetail').onclick = () => { closeDetail(); world.controls().autoRotate = true; };
+
+const rows = (pairs) => pairs.map(([k, v]) => `<div class="row"><span>${esc(k)}</span><span>${v}</span></div>`).join('');
+const topN = (obj, n = 3) => Object.entries(obj || {}).sort((a, b) => b[1] - a[1]).slice(0, n);
+
+function showCountry(f, fly) {
+  selected = f; refreshPolys();
+  if (fly) flyTo(f.c.lat, f.c.lng, 1.6);
+  const o = state.countries[f.a2], r = state.ransom[f.a2];
+  const regs = state.regions.filter(x => x.cc === f.a2).sort((a, b) => b.score - a.score);
+  const news = [...state.cyberNews, ...state.powerNews].filter(n => n.place && n.place.cc === f.a2);
+  openDetail(
+    `<div class="kind"><span class="sym net"></span>País</div><h2>${esc(ptName(f.a2, f.properties.name))}</h2>` +
+    (o ? rows([['Internet', `<span style="color:var(--alert)">queda ${severity(norm(o.score))}</span>`], ['Eventos (24 h)', o.events],
+      ...Object.entries(o.parts).map(([k, v]) => [methodName(k), `<span class="mono">${fmt(v)}</span>`])])
+       : rows([['Internet', 'sem queda detectada']])) +
+    (regs.length ? `<div class="sec">Regiões afetadas</div>` + rows(regs.slice(0, 8).map(x => [x.name, severity(norm(x.score, regMaxLog))])) : '') +
+    (r ? `<div class="sec">Ransomware · 72 h</div>` + rows([['Ataques reivindicados', r.count], ...topN(r.sectors).map(([k, v]) => [k, v])]) : '') +
+    (news.length ? `<div class="sec">Notícias</div>` + news.slice(0, 5).map(hl).join('') : '') +
+    `<p style="margin:12px 0 0;font-size:12px"><a href="https://ioda.inetintel.cc.gatech.edu/country/${f.a2}" target="_blank" rel="noopener">Ver gráficos no IODA ↗</a></p>`);
+}
+function showRegion(r) {
+  selected = byA2[r.cc] || null; refreshPolys();
+  flyTo(r.lat, r.lng, 1.3);
+  const t = norm(r.score, regMaxLog);
+  openDetail(
+    `<div class="kind"><span class="sym net"></span>Região · queda de internet</div><h2>${esc(r.name)}</h2>` +
+    rows([['País', esc(ptName(r.cc))], ['Gravidade', `<span style="color:var(--alert)">${severity(t)}</span>`], ['Eventos (24 h)', r.events],
+      ...Object.entries(r.parts).map(([k, v]) => [methodName(k), `<span class="mono">${fmt(v)}</span>`])]) +
+    `<p style="margin:12px 0 0;font-size:12px"><a href="https://ioda.inetintel.cc.gatech.edu/region/${encodeURIComponent(r.code)}" target="_blank" rel="noopener">Ver gráficos no IODA ↗</a></p>`);
+}
+function showRansom(a2) {
+  const f = byA2[a2]; const r = state.ransom[a2];
+  if (f) { selected = f; refreshPolys(); flyTo(f.c.lat, f.c.lng, 1.7); }
+  openDetail(
+    `<div class="kind"><span class="sym cyb"></span>Ransomware · 72 h</div><h2>${esc(ptName(a2))}</h2>` +
+    rows([['Ataques reivindicados', r.count]]) +
+    `<div class="sec">Setores</div>` + rows(topN(r.sectors, 6)) +
+    `<div class="sec">Grupos</div>` + rows(topN(r.groups, 6)) +
+    `<p class="note">Reivindicações publicadas pelos próprios grupos; nem todas são confirmadas pelas vítimas.</p>`);
+}
+function hl(n) {
+  return `<div class="hl"><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title)}</a><small>${esc(n.source)} · ${ago(n.date)}</small></div>`;
+}
+function showNews(g, kind) {
+  selected = byA2[g.cc] || null; refreshPolys();
+  flyTo(g.lat, g.lng, 1.4);
+  openDetail(
+    `<div class="kind"><span class="sym ${kind}"></span>${kind === 'cyb' ? 'Ciberataques · notícias' : 'Apagões · notícias'}</div><h2>${esc(g.name)}</h2>` +
+    g.items.slice(0, 10).map(hl).join(''));
+}
+
+/* ---------- side lists ---------- */
+function li(html, onClick, sel) {
+  const el = document.createElement('li');
+  el.innerHTML = html;
+  el.onclick = (e) => {
+    if (e.target.closest('a')) return;
+    document.querySelectorAll('ul.list li.sel').forEach(x => x.classList.remove('sel'));
+    el.classList.add('sel'); onClick();
+  };
+  return el;
+}
+function fill(id, items, emptyText) {
+  const ul = document.getElementById(id);
+  ul.innerHTML = '';
+  if (!items.length) ul.innerHTML = `<li class="empty">${emptyText}</li>`;
+  items.forEach(i => ul.appendChild(i));
+}
+function newsItems(list, kind) {
+  return list.slice(0, 60).map(n => li(
+    `<div class="t">${esc(n.title)}</div><div class="m">` +
+    (n.place ? `<span class="pl">◎ ${esc(n.place.type === 'country' ? ptName(n.place.cc, n.place.name) : n.place.name)}</span>` : '<span>sem local</span>') +
+    `<span>${esc(n.source)}</span><span>${ago(n.date)}</span><a class="open" href="${esc(n.url)}" target="_blank" rel="noopener" title="Abrir notícia">↗</a></div>`,
+    () => {
+      if (n.place) showNews(groupByPlace([...(kind === 'cyb' ? state.cyberNews : state.powerNews)]).find(g => g.items.includes(n)), kind);
+      else window.open(n.url, '_blank', 'noopener');
+    }));
+}
 
 function render() {
-  maxLog = Math.max(1, ...Object.values(outages).map(o => Math.log10(o.score + 1)));
-  world.polygonsData(features);
-  refreshStyles();
-  const hot = features.filter(f => outages[f.a2]).map(f => ({ ...centroid(f), t: norm(outages[f.a2].score) }));
-  world.ringsData(hot.filter(h => h.t > 0.35));
+  maxLog = Math.max(1, ...Object.values(state.countries).map(o => Math.log10(o.score + 1)));
+  regMaxLog = Math.max(1, ...state.regions.map(o => Math.log10(o.score + 1)));
+  world.polygonsData(features); refreshPolys();
+  buildMarkers();
 
-  const sorted = Object.entries(outages).sort((a, b) => b[1].score - a[1].score);
-  document.getElementById('nCountries').textContent = sorted.length;
-  document.getElementById('nEvents').textContent = sorted.reduce((s, [, o]) => s + o.events, 0);
-  const list = document.getElementById('list');
-  list.innerHTML = sorted.length ? '' : '<li class="empty">Nenhuma queda de país detectada nas últimas 24 h.</li>';
-  for (const [a2, o] of sorted) {
-    const li = document.createElement('li');
-    li.dataset.a2 = a2;
-    if (selected && selected.a2 === a2) li.classList.add('sel');
-    li.innerHTML = `<span class="sw"></span><span class="nm">${ptName(a2, o.name)}</span>` +
-      `<span class="sc">${severity(o.score)}</span><span class="bar"><i style="width:${Math.round(norm(o.score) * 100)}%"></i></span>`;
-    li.onclick = () => { const f = features.find(x => x.a2 === a2); if (f) select(f); };
-    list.appendChild(li);
+  const err = (k) => state.errors[k] ? `<li class="empty">Fonte indisponível agora (${esc(state.errors[k])}). Nova tentativa em 5 min.</li>` : null;
+
+  // Internet
+  const ctry = Object.entries(state.countries).sort((a, b) => b[1].score - a[1].score);
+  const regionCountries = new Set(state.regions.map(r => r.cc));
+  const allCc = [...new Set([...ctry.map(([a2]) => a2), ...regionCountries])];
+  const scoreOf = (a2) => state.countries[a2] ? norm(state.countries[a2].score) : Math.max(...state.regions.filter(r => r.cc === a2).map(r => norm(r.score, regMaxLog))) * 0.5;
+  allCc.sort((a, b) => scoreOf(b) - scoreOf(a));
+  document.getElementById('cNet').textContent = state.errors.outages && !ctry.length ? '?' : allCc.length;
+  const netItems = allCc.map(a2 => {
+    const o = state.countries[a2], t = scoreOf(a2);
+    const regs = state.regions.filter(r => r.cc === a2).sort((a, b) => b.score - a.score);
+    return li(
+      `<div class="row1"><span class="sym net"></span><span class="nm">${esc(ptName(a2, o && o.name))}</span>` +
+      `<span class="sc">${o ? severity(t) : 'só regiões'}</span><span class="bar"><i style="width:${Math.round(t * 100)}%"></i></span></div>` +
+      (regs.length ? `<div class="subrows">${regs.slice(0, 4).map(r => `<div><span>${esc(r.name)}</span><span>${severity(norm(r.score, regMaxLog))}</span></div>`).join('')}` +
+        (regs.length > 4 ? `<div><span>+ ${regs.length - 4} região(ões)</span></div>` : '') + '</div>' : ''),
+      () => { const f = byA2[a2]; if (f) showCountry(f, true); else if (regs[0]) showRegion(regs[0]); });
+  });
+  const e1 = err('outages');
+  if (e1 && !netItems.length) document.getElementById('listNet').innerHTML = e1;
+  else fill('listNet', netItems, 'Nenhuma queda detectada nas últimas 24 h.');
+
+  // Ciber
+  const rs = Object.entries(state.ransom).sort((a, b) => b[1].count - a[1].count);
+  const totalRansom = rs.reduce((s, [, r]) => s + r.count, 0) + state.ransomUnknown;
+  document.getElementById('cCyb').textContent = totalRansom + state.cyberNews.length || (state.errors.cyber && state.errors.news ? '?' : 0);
+  const e2 = err('cyber');
+  if (e2) document.getElementById('listRansom').innerHTML = e2;
+  else fill('listRansom', rs.map(([a2, r]) => li(
+    `<div class="row1"><span class="sym cyb"></span><span class="nm">${esc(ptName(a2))}</span><span class="sc">${topN(r.sectors, 1).map(x => esc(x[0])).join('')}</span><span class="mono" style="min-width:22px;text-align:right">${r.count}</span></div>`,
+    () => showRansom(a2))).concat(state.ransomUnknown ? [li(`<div class="row1"><span class="sym cyb"></span><span class="nm">País não informado</span><span class="mono">${state.ransomUnknown}</span></div>`, () => {})] : []),
+    'Nenhum ataque reivindicado nas últimas 72 h.');
+  const e3 = err('news');
+  if (e3) { document.getElementById('listCyberNews').innerHTML = e3; document.getElementById('listPowerNews').innerHTML = e3; }
+  else {
+    fill('listCyberNews', newsItems(state.cyberNews, 'cyb'), 'Nenhuma notícia nas últimas 24 h.');
+    fill('listPowerNews', newsItems(state.powerNews, 'pwr'), 'Nenhuma notícia nas últimas 24 h.');
   }
+  document.getElementById('cPwr').textContent = state.errors.news ? '?' : state.powerNews.length;
 }
 
+/* ---------- data loading ---------- */
+async function getJSON(path) {
+  const r = await fetch(path, { cache: 'no-store' });
+  const ct = r.headers.get('content-type') || '';
+  if (!ct.includes('json')) throw new Error('API não encontrada');
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+  return j;
+}
 function setStatus(kind, txt) {
   document.getElementById('dot').className = 'dot ' + kind;
   document.getElementById('statusTxt').textContent = txt;
 }
-
-async function loadOutages() {
+async function loadAll() {
   setStatus('', 'Atualizando…');
-  const until = Math.floor(Date.now() / 1000), from = until - 86400;
-  try {
-    // On Vercel, /api/outages proxies IODA; fall back to calling IODA directly (e.g. when opened as a local file)
-    let r = await fetch('/api/outages').catch(() => null);
-    if (!r || !r.ok || !(r.headers.get('content-type') || '').includes('json'))
-      r = await fetch(`${IODA}?from=${from}&until=${until}&entityType=country&limit=300`);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
-    const rows = Array.isArray(j.data) ? j.data : (j.data && Array.isArray(j.data.data) ? j.data.data : []);
+  const [o, rg, cy, nw] = await Promise.allSettled([getJSON('/api/outages'), getJSON('/api/regions'), getJSON('/api/cyber'), getJSON('/api/news')]);
+  state.errors = {};
+  if (o.status === 'fulfilled') {
     const next = {};
-    for (const row of rows) {
-      const code = (row.entity && row.entity.code || '').toUpperCase();
-      if (!code) continue;
-      const scores = row.scores || {};
-      const parts = { ...scores }; delete parts.overall;
+    for (const row of Array.isArray(o.value.data) ? o.value.data : []) {
+      const code = (row.entity && row.entity.code || '').toUpperCase(); if (!code) continue;
+      const scores = row.scores || {}; const parts = { ...scores }; delete parts.overall;
       next[code] = { score: Number(scores.overall) || 0, events: Number(row.event_cnt) || 0, name: row.entity.name, parts };
     }
-    outages = next;
-    render();
-    setStatus('live', 'Ao vivo · ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
-  } catch (e) {
-    console.error(e);
-    setStatus('err', 'IODA indisponível (' + e.message + ') · nova tentativa em 5 min');
-    if (features.length) render();
-  }
+    state.countries = next;
+  } else state.errors.outages = o.reason.message;
+  if (rg.status === 'fulfilled') state.regions = rg.value.regions || [];
+  else state.errors.regions = rg.reason.message;
+  if (cy.status === 'fulfilled') {
+    state.ransom = cy.value.byCountry || {};
+    state.ransomUnknown = (cy.value.attacks || []).filter(a => !a.cc).length;
+  } else state.errors.cyber = cy.reason.message;
+  if (nw.status === 'fulfilled') { state.cyberNews = nw.value.cyber || []; state.powerNews = nw.value.outage || []; }
+  else state.errors.news = nw.reason.message;
+  render();
+  const failed = Object.keys(state.errors).length;
+  const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (failed === 4) setStatus('err', 'Sem conexão com as fontes · nova tentativa em 5 min');
+  else setStatus(failed ? 'err' : 'live', (failed ? `${failed} fonte(s) indisponível(is) · ` : 'Ao vivo · ') + time);
 }
-document.getElementById('refresh').onclick = loadOutages;
+document.getElementById('refresh').onclick = loadAll;
+
+/* ---------- UI wiring ---------- */
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'pane-' + b.dataset.tab));
+});
+document.querySelectorAll('.layer').forEach(b => b.onclick = () => {
+  const k = b.dataset.layer;
+  state.layers[k] = !state.layers[k];
+  b.setAttribute('aria-pressed', String(state.layers[k]));
+  refreshPolys(); buildMarkers();
+});
 
 world.backgroundColor(isDark() ? '#000000' : '#ffffff');
 fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
@@ -383,10 +617,11 @@ fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
     features = allFeatures
       .filter(f => f.properties.name !== 'Antarctica')
       .map(f => Object.assign(f, { a2: NUM2A2[f.id] || (f.properties.name === 'Kosovo' ? 'XK' : '') }));
+    for (const f of features) { f.c = centroid(f); if (f.a2) byA2[f.a2] = f; }
     await applyTheme();
     render();
-    loadOutages();
-    setInterval(loadOutages, REFRESH_MS);
+    loadAll();
+    setInterval(loadAll, REFRESH_MS);
   });
 </script>
 </body>
