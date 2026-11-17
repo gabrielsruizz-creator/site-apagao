@@ -367,9 +367,47 @@ const severity = (t) => t > .75 ? 'grave' : t > .5 ? 'alta' : t > .25 ? 'moderad
 const alertRGBA = (a) => (isDark() ? `rgba(255,59,48,${a})` : `rgba(224,36,27,${a})`);
 
 /* ---------- dotted globe texture ---------- */
+/* ---------- paletas de cores (escuro + modelos do tema claro) ---------- */
+// Cada modelo do tema claro é só um conjunto de cores. Para testar: ?claro=a, ?claro=b, ?claro=c ou ?claro=d
+const PALETTES = {
+  dark: { bg: '#000000', bgGlow: 'rgba(255,255,255,0.05)', star: '255,255,255', starA: 1, sparkle: false,
+    paper: '#000000', ink: '#ffffff', glow: 'rgba(255,255,255,.85)', coastW: 3, borderA: 0.6, borderW: 1.8,
+    land: '#ffffff', landA: 0.95, sea: '#ffffff', seaA: 0.5, atm: '#ffffff', atmAlt: 0.16, emissive: 0, shine: 30, css: null },
+  // A · Névoa: cinza-claro frio, globo gelo (não branco puro), estrelas grafite
+  a: { bg: '#cfd1d5', bgGlow: 'rgba(255,255,255,0.45)', star: '22,24,30', starA: 0.7, sparkle: true,
+    paper: '#d6d8dc', ink: '#0d0e10', glow: null, coastW: 3.4, borderA: 0.5, borderW: 2,
+    land: '#15161a', landA: 0.75, sea: '#15161a', seaA: 0.42, atm: '#3a3d44', atmAlt: 0.1, emissive: 0.12, shine: 4,
+    css: { '--bg': '#cfd1d5', '--panel': 'rgba(244,245,247,.9)' } },
+  // B · Papel antigo: tons de papel/sépia, aspecto de mapa impresso
+  b: { bg: '#d9d1c1', bgGlow: 'rgba(255,250,240,0.5)', star: '58,44,28', starA: 0.65, sparkle: true,
+    paper: '#e0d6c2', ink: '#241c13', glow: null, coastW: 3.4, borderA: 0.5, borderW: 2,
+    land: '#2a2118', landA: 0.75, sea: '#3b2f22', seaA: 0.4, atm: '#4a3b28', atmAlt: 0.1, emissive: 0.12, shine: 3,
+    css: { '--bg': '#d9d1c1', '--panel': 'rgba(246,241,231,.92)' } },
+  // C · Ardósia: cinza-azulado, mais "céu", estrelas azul-marinho
+  c: { bg: '#c3ccd8', bgGlow: 'rgba(240,245,255,0.5)', star: '16,26,46', starA: 0.7, sparkle: true,
+    paper: '#d3dbe5', ink: '#0b1422', glow: null, coastW: 3.4, borderA: 0.5, borderW: 2,
+    land: '#0e1726', landA: 0.75, sea: '#22324d', seaA: 0.45, atm: '#1d2a40', atmAlt: 0.1, emissive: 0.12, shine: 4,
+    css: { '--bg': '#c3ccd8', '--panel': 'rgba(241,244,248,.9)' } },
+  // D · Contraste: painel claro, mas o globo continua escuro como no tema escuro
+  d: { bg: '#d4d4d4', bgGlow: 'rgba(255,255,255,0.5)', star: '20,20,20', starA: 0.65, sparkle: true,
+    paper: '#0a0a0a', ink: '#ffffff', glow: 'rgba(255,255,255,.7)', coastW: 3, borderA: 0.55, borderW: 1.8,
+    land: '#ffffff', landA: 0.9, sea: '#ffffff', seaA: 0.45, atm: '#000000', atmAlt: 0.12, emissive: 0, shine: 30,
+    css: { '--bg': '#d4d4d4', '--panel': 'rgba(250,250,250,.92)' } },
+};
+let lightPreset = (new URLSearchParams(location.search).get('claro') || 'a').toLowerCase();
+if (!PALETTES[lightPreset] || lightPreset === 'dark') lightPreset = 'a';
+const pal = () => isDark() ? PALETTES.dark : PALETTES[lightPreset];
+const globeDark = () => pal().ink === '#ffffff';   // globo escuro com traço claro (tema escuro ou modelo D)
+function applyPaletteCss() {
+  const root = document.documentElement.style, P = pal();
+  for (const k of ['--bg', '--panel']) root.removeProperty(k);
+  if (P.css) for (const [k, v] of Object.entries(P.css)) root.setProperty(k, v);
+}
+applyPaletteCss();
+
 function buildTexture() {
-  const W = 8192, H = 4096, dark = isDark();
-  const ink = dark ? '#ffffff' : '#000000', paper = dark ? '#000000' : '#ffffff';
+  const W = 8192, H = 4096, P = pal();
+  const ink = P.ink, paper = P.paper;
   const px = (lng) => (lng + 180) / 360 * W, py = (lat) => (90 - lat) / 180 * H;
   const ringsOf = (f) => f.geometry.type === 'Polygon' ? f.geometry.coordinates : f.geometry.coordinates.flat();
   const trace = (ctx, lines, offset, close) => {
@@ -388,12 +426,12 @@ function buildTexture() {
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const ctx = c.getContext('2d');
   ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = dark ? 3 : 3.6;
-  if (dark) { ctx.shadowColor = 'rgba(255,255,255,.85)'; ctx.shadowBlur = 10; }
+  ctx.strokeStyle = ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = P.coastW;
+  if (P.glow) { ctx.shadowColor = P.glow; ctx.shadowBlur = 10; }
   for (const o of [-W, 0, W]) { trace(ctx, coastLines, o, false); ctx.stroke(); }
   ctx.shadowBlur = 0;
   // fronteiras: finas e mais apagadas que o litoral, para separar os países sem poluir
-  ctx.globalAlpha = dark ? 0.6 : 0.45; ctx.lineWidth = dark ? 1.8 : 2.2;
+  ctx.globalAlpha = P.borderA; ctx.lineWidth = P.borderW;
   for (const o of [-W, 0, W]) { trace(ctx, borderLines, o, false); ctx.stroke(); }
   ctx.globalAlpha = 1;
   return new Promise(res => c.toBlob(b => {
@@ -420,29 +458,27 @@ function makeStars() {
   });
 }
 function drawStars(time = 0) {
-  const dark = isDark();
-  sctx.fillStyle = dark ? '#000' : '#ecece9';
+  const P = pal();
+  sctx.fillStyle = P.bg;
   sctx.fillRect(0, 0, starW, starH);
-  if (!dark) {                                         // tema claro: sem estrelas, só uma luz suave no centro
-    const g = sctx.createRadialGradient(starW * .6, starH * .48, 0, starW * .6, starH * .48, Math.max(starW, starH) * .65);
-    g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-    sctx.fillStyle = g; sctx.fillRect(0, 0, starW, starH);
-    return;
-  }
-  if (dark) {                                          // brilho bem suave, como uma nebulosa distante
-    const g = sctx.createRadialGradient(starW * .62, starH * .45, 0, starW * .62, starH * .45, Math.max(starW, starH) * .7);
-    g.addColorStop(0, 'rgba(255,255,255,0.05)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-    sctx.fillStyle = g; sctx.fillRect(0, 0, starW, starH);
-  }
+  // luz suave atrás do globo
+  const g = sctx.createRadialGradient(starW * .6, starH * .47, 0, starW * .6, starH * .47, Math.max(starW, starH) * .68);
+  g.addColorStop(0, P.bgGlow); g.addColorStop(1, P.bgGlow.replace(/[\d.]+\)$/, '0)'));
+  sctx.fillStyle = g; sctx.fillRect(0, 0, starW, starH);
   parX += (tgtX - parX) * 0.05; parY += (tgtY - parY) * 0.05;
-  const ink = dark ? '255,255,255' : '0,0,0';
   for (const st of stars) {
-    let a = st.a * (dark ? 1 : 0.25);
+    let a = st.a * P.starA;
     if (st.tw !== null && !reduceMotion) a *= 0.5 + 0.5 * Math.sin(time / 850 + st.tw);
     const x = ((st.x + parX * st.d * 24) % starW + starW) % starW;
     const y = ((st.y + parY * st.d * 24) % starH + starH) % starH;
-    sctx.fillStyle = `rgba(${ink},${a.toFixed(3)})`;
+    sctx.fillStyle = `rgba(${P.star},${a.toFixed(3)})`;
     sctx.beginPath(); sctx.arc(x, y, st.r, 0, 6.2832); sctx.fill();
+    // no tema claro as estrelas maiores ganham um brilho em cruz, para lerem como estrelas e não como poeira
+    if (P.sparkle && st.d > 0.55) {
+      const L = 2 + st.d * 4;
+      sctx.strokeStyle = `rgba(${P.star},${(a * 0.7).toFixed(3)})`; sctx.lineWidth = 0.8;
+      sctx.beginPath(); sctx.moveTo(x - L, y); sctx.lineTo(x + L, y); sctx.moveTo(x, y - L); sctx.lineTo(x, y + L); sctx.stroke();
+    }
   }
 }
 function starLoop(t) { drawStars(t); requestAnimationFrame(starLoop); }
@@ -455,10 +491,10 @@ if (reduceMotion) drawStars(); else requestAnimationFrame(starLoop);
 /* ---------- globe ---------- */
 const world = Globe()(document.getElementById('globe'))
   .showAtmosphere(true).atmosphereAltitude(0.16)
-  .polygonCapColor(d => d === selected ? (isDark() ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.15)')
-    : d === hovered ? (isDark() ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)') : 'rgba(0,0,0,0)')
+  .polygonCapColor(d => d === selected ? (globeDark() ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.15)')
+    : d === hovered ? (globeDark() ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)') : 'rgba(0,0,0,0)')
   .polygonSideColor(() => 'rgba(0,0,0,0)')
-  .polygonStrokeColor(d => d === selected || d === hovered ? (isDark() ? 'rgba(255,255,255,0.95)' : 'rgba(0,0,0,0.9)') : 'rgba(0,0,0,0)')
+  .polygonStrokeColor(d => d === selected || d === hovered ? (globeDark() ? 'rgba(255,255,255,0.95)' : 'rgba(0,0,0,0.9)') : 'rgba(0,0,0,0)')
   .polygonAltitude(d => d === selected ? 0.008 : d === hovered ? 0.005 : 0.002)
   .onPolygonHover(d => {
     if ((d || null) === hovered) return;
@@ -557,11 +593,11 @@ async function buildDots() {
 }
 function recolorDots() {
   if (!dotLayers) return;
-  const dark = isDark();
-  dotLayers.land.material.color.set(dark ? '#ffffff' : '#000000');
-  dotLayers.land.material.opacity = dark ? 0.95 : 0.7;
-  dotLayers.sea.material.color.set(dark ? '#ffffff' : '#000000');
-  dotLayers.sea.material.opacity = dark ? 0.5 : 0.4;
+  const P = pal();
+  dotLayers.land.material.color.set(P.land);
+  dotLayers.land.material.opacity = P.landA;
+  dotLayers.sea.material.color.set(P.sea);
+  dotLayers.sea.material.opacity = P.seaA;
 }
 
 // filtragem anisotrópica: deixa as linhas nítidas quando vistas de lado (bordas do globo e polos)
@@ -572,10 +608,11 @@ function sharpenTexture(tries = 20) {
   map.needsUpdate = true;
 }
 async function applyTheme() {
-  const dark = isDark();
+  const P = pal();
+  applyPaletteCss();
   world.backgroundColor('rgba(0,0,0,0)')
-    .atmosphereColor(dark ? '#ffffff' : '#000000')
-    .atmosphereAltitude(dark ? 0.16 : 0.07);
+    .atmosphereColor(P.atm)
+    .atmosphereAltitude(P.atmAlt);
   // no tema claro, a iluminação deixava o globo cinza e sujo: um brilho próprio quase branco deixa ele limpo
   litGlobe();
   drawStars();
@@ -589,14 +626,14 @@ async function applyTheme() {
 }
 function litGlobe(tries = 20) {
   // o brilho usa a própria textura como máscara: o branco fica branco e as linhas pretas continuam pretas
-  const mat = world.globeMaterial(), dark = isDark();
+  const mat = world.globeMaterial(), P = pal();
   // espera a textura do tema atual carregar (senão o brilho usaria a do tema anterior)
   const ready = mat.map && mat.map.image && mat.map.image.src === textureUrl;
-  if (!dark && !ready) return tries && setTimeout(() => litGlobe(tries - 1), 150);
-  mat.emissiveMap = dark ? null : mat.map;
-  mat.emissive.set(dark ? '#000000' : '#ffffff');
-  mat.emissiveIntensity = dark ? 1 : 0.82;
-  mat.shininess = dark ? 30 : 0;
+  if (P.emissive && !ready) return tries && setTimeout(() => litGlobe(tries - 1), 150);
+  mat.emissiveMap = P.emissive ? mat.map : null;
+  mat.emissive.set(P.emissive ? '#ffffff' : '#000000');
+  mat.emissiveIntensity = P.emissive || 1;
+  mat.shininess = P.shine;
   mat.needsUpdate = true;
 }
 function refreshPolys() {
