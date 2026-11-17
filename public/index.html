@@ -27,7 +27,11 @@
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);overflow:hidden;
     font:14px/1.45 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;transition:background .3s,color .3s}
+  #stars{position:fixed;inset:0;width:100%;height:100%;display:block}
   #globe{position:fixed;inset:0}
+  #globe canvas{cursor:grab}
+  #globe canvas:active{cursor:grabbing}
+  body.hovering #globe canvas{cursor:pointer}
   a{color:var(--text);text-underline-offset:2px}
   .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 
@@ -51,17 +55,25 @@
   .layer{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 9px;text-transform:none;letter-spacing:0}
   .layer .k{display:flex;align-items:center;gap:6px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
   .layer .v{font-size:20px;font-weight:300;line-height:1.1}
-  .layer[aria-pressed="false"]{opacity:.45}
-  .layer[aria-pressed="false"] .v{text-decoration:line-through}
+  .layer .u{font-size:10px;color:var(--muted)}
+  .layer[aria-selected="false"]{background:none;opacity:.6}
+  .layer[aria-selected="false"]:hover{opacity:1}
+  .layer[aria-selected="true"]{border-color:var(--text);box-shadow:inset 0 -2px 0 var(--text)}
+  .head{border-bottom:1px solid var(--line)}
+  .layers{margin-bottom:14px!important}
+
+  #legend{position:fixed;left:50%;bottom:16px;transform:translateX(calc(-50% + 185px));display:flex;gap:14px;align-items:center;
+    padding:7px 12px;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);white-space:nowrap}
+  #legend .it{display:flex;align-items:center;gap:6px}
+  #legend .b{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;font:600 10px/1 ui-monospace,Menlo,monospace}
+  #legend .b.sm{min-width:8px;width:8px;height:8px;padding:0}
 
   .sym{display:inline-block;flex:none}
   .sym.net{width:8px;height:8px;border-radius:50%;background:var(--alert)}
   .sym.cyb{width:8px;height:8px;border:1.5px solid var(--ink);transform:rotate(45deg)}
   .sym.pwr{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--ink)}
 
-  .tabs{display:flex;border-bottom:1px solid var(--line);margin:0 -16px;padding:0 16px}
-  .tab{flex:1;background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:9px 4px;color:var(--muted)}
-  .tab[aria-selected="true"]{color:var(--text);border-bottom-color:var(--text)}
   .pane{display:none;padding-top:12px}
   .pane.on{display:block}
 
@@ -131,7 +143,12 @@
   .mk.clu .shp::after{content:"";position:absolute;inset:-2px;border-radius:999px;border:1.5px solid var(--alert);opacity:0;animation:halo 2.8s ease-out infinite}
   .mk.clu.calm .shp::after{animation:none}
   .mk.clu:hover .shp{transform:scale(1.12)}
-  .mk.clu.dot .shp{min-width:10px;width:10px;height:10px;padding:0}
+  .mk.clu.k-cyb .shp{background:var(--ink);color:var(--paper)}
+  .mk.clu.k-cyb .shp::after{border-color:var(--ink)}
+  .mk.clu.k-pwr .shp{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink),0 0 0 2px var(--paper),0 2px 10px rgba(0,0,0,.35)}
+  .mk.clu.k-pwr .shp::after{border-color:var(--ink)}
+  .mk.clu.dot .shp{opacity:.85}
+  .mk.clu.dot .shp{min-width:var(--s);width:var(--s);height:var(--s);padding:0}
   @keyframes halo{0%{transform:scale(1);opacity:.7}70%,100%{transform:scale(1.9);opacity:0}}
   /* individual region (after expanding) */
   .mk.reg{width:20px;height:20px}
@@ -154,10 +171,13 @@
   @media (max-width:700px){
     .panel{top:auto;bottom:0;left:0;right:0;width:auto;max-height:52%;border-radius:4px 4px 0 0}
     #detail{left:16px;right:16px;width:auto;top:16px;bottom:auto;max-height:40%}
+    #legend{left:16px;right:16px;bottom:auto;top:16px;transform:none;justify-content:center;white-space:normal;flex-wrap:wrap;border-radius:4px}
+    #detail[style*="block"] ~ #legend, body.detail-open #legend{display:none}
   }
 </style>
 </head>
 <body>
+<canvas id="stars" aria-hidden="true"></canvas>
 <div id="globe"></div>
 
 <aside class="panel">
@@ -175,19 +195,13 @@
     <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Carregando…</span>
       <span style="flex:1"></span><button id="refresh">Atualizar</button></div>
 
-    <div class="layers">
-      <button class="layer" data-layer="net" aria-pressed="true" title="Mostrar/ocultar no globo">
-        <span class="k"><span class="sym net"></span>Internet</span><span class="v" id="cNet">–</span></button>
-      <button class="layer" data-layer="cyb" aria-pressed="true" title="Mostrar/ocultar no globo">
-        <span class="k"><span class="sym cyb"></span>Ciber</span><span class="v" id="cCyb">–</span></button>
-      <button class="layer" data-layer="pwr" aria-pressed="true" title="Mostrar/ocultar no globo">
-        <span class="k"><span class="sym pwr"></span>Apagões</span><span class="v" id="cPwr">–</span></button>
-    </div>
-
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" data-tab="net" aria-selected="true">Internet</button>
-      <button class="tab" role="tab" data-tab="cyb" aria-selected="false">Ciberataques</button>
-      <button class="tab" role="tab" data-tab="pwr" aria-selected="false">Apagões</button>
+    <div class="layers" role="tablist" aria-label="O que mostrar no globo">
+      <button class="layer tab" role="tab" data-tab="net" aria-selected="true">
+        <span class="k"><span class="sym net"></span>Internet</span><span class="v" id="cNet">–</span><span class="u">países</span></button>
+      <button class="layer tab" role="tab" data-tab="cyb" aria-selected="false">
+        <span class="k"><span class="sym cyb"></span>Ciber</span><span class="v" id="cCyb">–</span><span class="u">ocorrências</span></button>
+      <button class="layer tab" role="tab" data-tab="pwr" aria-selected="false">
+        <span class="k"><span class="sym pwr"></span>Apagões</span><span class="v" id="cPwr">–</span><span class="u">notícias</span></button>
     </div>
   </div>
 
@@ -228,6 +242,8 @@
   </div>
 </aside>
 
+<div id="legend" aria-live="polite"></div>
+
 <div id="detail"><button class="x" id="closeDetail" aria-label="Fechar">×</button><div id="detailBody"></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.46.2/dist/globe.gl.min.js"></script>
@@ -254,14 +270,15 @@ const state = {
   ransom: {},      // a2 -> {count, groups, sectors}
   ransomUnknown: 0,
   cyberNews: [], powerNews: [],
-  layers: { net: true, cyb: true, pwr: true },
+  mode: 'net',     // tema mostrado no globo: net | cyb | pwr
   errors: {},
 };
 let maxLog = 1, regMaxLog = 1;
 let selected = null;
+let hovered = null;
 const expanded = new Set();   // países abertos com clique
 let zoomedIn = false;          // perto o bastante para abrir todos
-let features = [], allFeatures = [], coastLines = [], byA2 = {};
+let features = [], allFeatures = [], coastLines = [], borderLines = [], byA2 = {};
 let textureUrl = null;
 
 const norm = (score, max = maxLog) => score ? Math.min(1, Math.log10(score + 1) / max) : 0;
@@ -287,59 +304,95 @@ function buildTexture() {
       if (close) ctx.closePath();
     }
   };
-  const landRings = allFeatures.flatMap(ringsOf);
-  const mask = document.createElement('canvas'); mask.width = W / 4; mask.height = H / 4;
-  const m = mask.getContext('2d', { willReadFrequently: true });
-  m.scale(0.25, 0.25); m.fillStyle = '#fff';
-  for (const o of [-W, 0, W]) { trace(m, landRings, o, true); m.fill('evenodd'); }
-  const md = m.getImageData(0, 0, mask.width, mask.height).data;
-  const isLand = (x, y) => md[((Math.min(mask.height - 1, y >> 2) * mask.width) + Math.min(mask.width - 1, x >> 2)) * 4] > 127;
-
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const ctx = c.getContext('2d');
   ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
-  const dots = (step, r, alpha, wantLand) => {
-    ctx.fillStyle = ink; ctx.globalAlpha = alpha;
-    for (let y = step / 2; y < H; y += step) {
-      const lat = 90 - y / H * 180;
-      const sx = step / Math.max(0.08, Math.cos(lat * Math.PI / 180));
-      for (let x = (Math.round(y / step) % 2) * sx / 2; x < W; x += sx) {
-        if (isLand(x | 0, y | 0) !== wantLand) continue;
-        ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
-      }
-    }
-  };
-  dots(15, 2.6, dark ? 0.95 : 0.85, true);
-  dots(46, 3.2, dark ? 0.75 : 0.5, false);
-  ctx.globalAlpha = 1;
   ctx.strokeStyle = ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 3;
   if (dark) { ctx.shadowColor = 'rgba(255,255,255,.85)'; ctx.shadowBlur = 10; }
   for (const o of [-W, 0, W]) { trace(ctx, coastLines, o, false); ctx.stroke(); }
   ctx.shadowBlur = 0;
+  // fronteiras: finas e mais apagadas que o litoral, para separar os países sem poluir
+  ctx.globalAlpha = dark ? 0.6 : 0.5; ctx.lineWidth = 1.8;
+  for (const o of [-W, 0, W]) { trace(ctx, borderLines, o, false); ctx.stroke(); }
+  ctx.globalAlpha = 1;
   return new Promise(res => c.toBlob(b => {
     if (textureUrl) URL.revokeObjectURL(textureUrl);
     textureUrl = URL.createObjectURL(b); res(textureUrl);
   }));
 }
 
+/* ---------- starry background ---------- */
+const starCanvas = document.getElementById('stars');
+const sctx = starCanvas.getContext('2d');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let stars = [], starW = 0, starH = 0, parX = 0, parY = 0, tgtX = 0, tgtY = 0;
+function makeStars() {
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  starW = innerWidth; starH = innerHeight;
+  starCanvas.width = starW * dpr; starCanvas.height = starH * dpr;
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const n = Math.round(starW * starH / 2400);
+  stars = Array.from({ length: n }, () => {
+    const depth = Math.random() ** 2;                  // a maioria é distante e fraca
+    return { x: Math.random() * starW, y: Math.random() * starH, r: 0.3 + depth * 1.3,
+      a: 0.2 + depth * 0.75, d: depth, tw: Math.random() < 0.2 ? Math.random() * 6.28 : null };
+  });
+}
+function drawStars(time = 0) {
+  const dark = isDark();
+  sctx.fillStyle = dark ? '#000' : '#fff';
+  sctx.fillRect(0, 0, starW, starH);
+  if (dark) {                                          // brilho bem suave, como uma nebulosa distante
+    const g = sctx.createRadialGradient(starW * .62, starH * .45, 0, starW * .62, starH * .45, Math.max(starW, starH) * .7);
+    g.addColorStop(0, 'rgba(255,255,255,0.05)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    sctx.fillStyle = g; sctx.fillRect(0, 0, starW, starH);
+  }
+  parX += (tgtX - parX) * 0.05; parY += (tgtY - parY) * 0.05;
+  const ink = dark ? '255,255,255' : '0,0,0';
+  for (const st of stars) {
+    let a = st.a * (dark ? 1 : 0.25);
+    if (st.tw !== null && !reduceMotion) a *= 0.5 + 0.5 * Math.sin(time / 850 + st.tw);
+    const x = ((st.x + parX * st.d * 24) % starW + starW) % starW;
+    const y = ((st.y + parY * st.d * 24) % starH + starH) % starH;
+    sctx.fillStyle = `rgba(${ink},${a.toFixed(3)})`;
+    sctx.beginPath(); sctx.arc(x, y, st.r, 0, 6.2832); sctx.fill();
+  }
+}
+function starLoop(t) { drawStars(t); requestAnimationFrame(starLoop); }
+makeStars();
+addEventListener('resize', () => { makeStars(); drawStars(); });
+// as estrelas próximas se deslocam um pouco com o mouse (paralaxe)
+addEventListener('pointermove', (e) => { tgtX = 0.5 - e.clientX / innerWidth; tgtY = 0.5 - e.clientY / innerHeight; });
+if (reduceMotion) drawStars(); else requestAnimationFrame(starLoop);
+
 /* ---------- globe ---------- */
 const world = Globe()(document.getElementById('globe'))
   .showAtmosphere(true).atmosphereAltitude(0.16)
-  .polygonCapColor(d => {
-    const o = state.layers.net && state.countries[d.a2];
-    if (d === selected) return isDark() ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)';
-    return o ? alertRGBA(0.1 + 0.3 * norm(o.score)) : 'rgba(0,0,0,0)';
+  .polygonCapColor(d => d === selected ? (isDark() ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.15)')
+    : d === hovered ? (isDark() ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)') : 'rgba(0,0,0,0)')
+  .polygonSideColor(() => 'rgba(0,0,0,0)')
+  .polygonStrokeColor(d => d === selected || d === hovered ? (isDark() ? 'rgba(255,255,255,0.95)' : 'rgba(0,0,0,0.9)') : 'rgba(0,0,0,0)')
+  .polygonAltitude(d => d === selected ? 0.008 : d === hovered ? 0.005 : 0.002)
+  .onPolygonHover(d => {
+    if ((d || null) === hovered) return;
+    hovered = d || null;
+    document.body.classList.toggle('hovering', !!d);
+    refreshPolys();
   })
-  .polygonSideColor(d => state.layers.net && state.countries[d.a2] ? alertRGBA(0.3) : 'rgba(0,0,0,0)')
-  .polygonStrokeColor(d => state.layers.net && state.countries[d.a2] ? alertRGBA(0.6) : (d === selected ? (isDark() ? '#fff' : '#000') : 'rgba(0,0,0,0)'))
-  .polygonAltitude(d => d === selected ? 0.02 : state.layers.net && state.countries[d.a2] ? 0.005 + 0.012 * norm(state.countries[d.a2].score) : 0.002)
   .polygonLabel(d => {
-    const o = state.countries[d.a2], r = state.ransom[d.a2];
-    return `<div class="tip"><b>${esc(ptName(d.a2, d.properties.name))}</b><br>` +
-      (o ? `<span class="a">●</span> Internet: queda ${severity(norm(o.score))}<br>` : 'Internet: sem queda detectada<br>') +
-      (r ? `◆ ${r.count} ataque(s) de ransomware (72 h)` : '') + '</div>';
+    const name = `<b>${esc(ptName(d.a2, d.properties.name))}</b>`;
+    let info;
+    if (state.mode === 'net') {
+      const o = state.countries[d.a2], n = state.regions.filter(r => r.cc === d.a2).length;
+      info = o || n ? `<span class="a">●</span> ${n ? plural(n, 'região', 'regiões') + ' com queda de internet' : 'queda de internet no país'}` : 'Internet sem quedas';
+    } else {
+      const a = (state.mode === 'cyb' ? cyberByCountry() : powerByCountry())[d.a2];
+      info = !a ? (state.mode === 'cyb' ? 'Nenhum ciberataque registrado' : 'Nenhuma notícia de apagão')
+        : state.mode === 'cyb' ? `◆ ${plural(a.total, 'ocorrência', 'ocorrências')}` : `▲ ${plural(a.total, 'notícia', 'notícias')}`;
+    }
+    return `<div class="tip">${name}<br>${info}</div>`;
   })
-  .onPolygonClick(d => openCountry(d.a2))
+  .onPolygonClick(d => state.mode === 'net' ? openCountry(d.a2) : showTopicCountry(d.a2, state.mode, true))
   .polygonsTransitionDuration(300)
   .htmlElementsData([])
   .htmlLat('lat').htmlLng('lng').htmlAltitude(0.01)
@@ -351,10 +404,95 @@ world.controls().autoRotateSpeed = 0.4;
 world.pointOfView({ lat: 15, lng: -40, altitude: 2.3 });
 addEventListener('resize', () => world.width(innerWidth).height(innerHeight));
 
+/* ---------- 3D dots (uniform over the sphere: no distortion at the poles) ---------- */
+const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.core.min.js';
+let dotLayers = null;
+function landTester() {
+  // máscara equirretangular só para classificar cada ponto como terra ou mar
+  const W = 2048, H = 1024;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const m = cv.getContext('2d', { willReadFrequently: true });
+  m.fillStyle = '#fff';
+  const px = (lng) => (lng + 180) / 360 * W, py = (lat) => (90 - lat) / 180 * H;
+  for (const off of [-W, 0, W]) {
+    m.beginPath();
+    for (const f of allFeatures) for (const ring of (f.geometry.type === 'Polygon' ? f.geometry.coordinates : f.geometry.coordinates.flat())) {
+      let prev = null, shift = 0;
+      ring.forEach(([lng, lat], i) => {
+        if (prev !== null) { const d = lng - prev; if (d > 180) shift -= 360; else if (d < -180) shift += 360; }
+        prev = lng;
+        i ? m.lineTo(px(lng + shift) + off, py(lat)) : m.moveTo(px(lng + shift) + off, py(lat));
+      });
+      m.closePath();
+    }
+    m.fill('evenodd');
+  }
+  const data = m.getImageData(0, 0, W, H).data;
+  // abaixo de -78° é tudo Antártida (o contorno dela no mapa plano não chega até o polo)
+  return (lat, lng) => lat < -78 || data[(Math.min(H - 1, py(lat) | 0) * W + Math.min(W - 1, px(lng) | 0)) * 4] > 127;
+}
+function fibonacci(n, keep) {
+  const out = [], golden = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < n; i++) {
+    const y = 1 - 2 * (i + 0.5) / n;
+    const lat = Math.asin(y) * 180 / Math.PI;
+    let lng = ((i * golden) * 180 / Math.PI) % 360; if (lng > 180) lng -= 360;
+    if (keep(lat, lng)) out.push(lat, lng);
+  }
+  return out;
+}
+async function buildDots() {
+  let THREE;
+  try { THREE = await import(THREE_URL); } catch (e) { console.error('three.js', e); return; }
+  const isLand = landTester();
+  const sprite = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.beginPath(); g.arc(32, 32, 28, 0, 6.2832); g.fill();
+    const t = new THREE.CanvasTexture(c); return t;
+  })();
+  const layer = (latlng, size, alt) => {
+    const pos = new Float32Array(latlng.length / 2 * 3);
+    for (let i = 0, j = 0; i < latlng.length; i += 2, j += 3) {
+      const c = world.getCoords(latlng[i], latlng[i + 1], alt);
+      pos[j] = c.x; pos[j + 1] = c.y; pos[j + 2] = c.z;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ size, map: sprite, transparent: true, alphaTest: 0.25, depthWrite: false, sizeAttenuation: true });
+    return new THREE.Points(geo, mat);
+  };
+  // terra: ~0,6° entre pontos; mar: bem mais espaçado
+  const land = layer(fibonacci(80000, (a, b) => isLand(a, b)), 0.95, 0.002);
+  const sea = layer(fibonacci(7000, (a, b) => !isLand(a, b)), 1.05, 0.001);
+  dotLayers = { land, sea };
+  world.scene().add(land, sea);
+  recolorDots();
+}
+function recolorDots() {
+  if (!dotLayers) return;
+  const dark = isDark();
+  dotLayers.land.material.color.set(dark ? '#ffffff' : '#000000');
+  dotLayers.land.material.opacity = dark ? 0.95 : 0.8;
+  dotLayers.sea.material.color.set(dark ? '#ffffff' : '#000000');
+  dotLayers.sea.material.opacity = dark ? 0.5 : 0.35;
+}
+
+// filtragem anisotrópica: deixa as linhas nítidas quando vistas de lado (bordas do globo e polos)
+function sharpenTexture(tries = 20) {
+  const map = world.globeMaterial().map;
+  if (!map || !map.image) return tries && setTimeout(() => sharpenTexture(tries - 1), 150);
+  map.anisotropy = world.renderer().capabilities.getMaxAnisotropy();
+  map.needsUpdate = true;
+}
 async function applyTheme() {
   const dark = isDark();
-  world.backgroundColor(dark ? '#000000' : '#ffffff').atmosphereColor(dark ? '#ffffff' : '#9a9a9a');
-  if (allFeatures.length) world.globeImageUrl(await buildTexture());
+  world.backgroundColor('rgba(0,0,0,0)').atmosphereColor(dark ? '#ffffff' : '#9a9a9a');
+  drawStars();
+  if (allFeatures.length) {
+    world.globeImageUrl(await buildTexture());
+    recolorDots();
+    sharpenTexture();
+  }
   refreshPolys();
 }
 function refreshPolys() {
@@ -393,9 +531,21 @@ function marker(cls, title, onClick, extra = '') {
   el.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
   return el;
 }
+// Bolha padrão: número dentro, tamanho pela gravidade/quantidade. Com valor 1 (ou pouco grave) vira só um ponto discreto.
+function bubble(kind, count, t, label, onClick, showNumber) {
+  const el = marker('clu k-' + kind + (showNumber ? '' : ' dot') + (t < 0.6 ? ' calm' : ''), label, onClick);
+  if (showNumber) el.querySelector('.shp').textContent = count > 99 ? '99+' : count;
+  el.style.setProperty('--s', (showNumber ? Math.round(20 + 12 * t) : Math.round(8 + 5 * t)) + 'px');
+  return el;
+}
+const posOf = (a2, pts) => byA2[a2] ? byA2[a2].c : pts && pts.length
+  ? { lat: pts.reduce((s, r) => s + r.lat, 0) / pts.length, lng: pts.reduce((s, r) => s + r.lng, 0) / pts.length } : null;
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
 function buildMarkers() {
   const out = [];
-  if (state.layers.net) {
+  const mode = state.mode;
+  if (mode === 'net') {
     const byCc = {};
     for (const r of state.regions) (byCc[r.cc] ||= []).push(r);
     for (const a2 of new Set([...Object.keys(state.countries), ...Object.keys(byCc)])) {
@@ -413,37 +563,60 @@ function buildMarkers() {
         });
         continue;
       }
-      const f = byA2[a2];
-      const pos = f ? f.c : regs.length ? { lat: regs.reduce((s, r) => s + r.lat, 0) / regs.length, lng: regs.reduce((s, r) => s + r.lng, 0) / regs.length } : null;
-      if (!pos) continue;
+      const pos = posOf(a2, regs); if (!pos) continue;
       const o = state.countries[a2];
       const t = o ? norm(o.score) : Math.max(...regs.map(r => norm(r.score, regMaxLog))) * 0.6;
-      const label = regs.length
-        ? `${ptName(a2, o && o.name)} · ${regs.length} ${regs.length > 1 ? 'regiões' : 'região'} com queda · clique para abrir`
-        : `${ptName(a2, o && o.name)} · queda de internet no país`;
-      const el = marker('clu' + (regs.length ? '' : ' dot') + (t < 0.5 ? ' calm' : ''), label, () => openCountry(a2));
-      if (regs.length) el.querySelector('.shp').textContent = regs.length;
-      el.style.setProperty('--s', Math.round(20 + 10 * t) + 'px');
-      out.push({ lat: pos.lat, lng: pos.lng, el });
+      const label = `${ptName(a2, o && o.name)} · ${regs.length ? plural(regs.length, 'região', 'regiões') + ' com queda' : 'queda no país'} · ${severity(t)}`;
+      out.push({ ...pos, el: bubble('net', regs.length, t, label, () => openCountry(a2), regs.length >= 2) });
     }
-  }
-  if (state.layers.cyb) {
-    for (const [a2, r] of Object.entries(state.ransom)) {
-      const f = byA2[a2]; if (!f) continue;
-      const c = f.c;
-      out.push({ lat: c.lat, lng: c.lng, el: marker('cyb big', `${ptName(a2)} · ${r.count} ataque(s) de ransomware`, () => showRansom(a2), `<span class="n">${r.count}</span>`) });
-    }
-    for (const g of groupByPlace(state.cyberNews)) {
-      out.push({ lat: g.lat + 0.6, lng: g.lng + 0.6, el: marker('cyb', `${g.name} · ${g.items.length} notícia(s) de ciberataque`, () => showNews(g, 'cyb')) });
-    }
-  }
-  if (state.layers.pwr) {
-    for (const g of groupByPlace(state.powerNews)) {
-      out.push({ lat: g.lat - 0.6, lng: g.lng - 0.6, el: marker('pwr', `${g.name} · ${g.items.length} notícia(s) de apagão`, () => showNews(g, 'pwr')) });
+  } else {
+    const agg = mode === 'cyb' ? cyberByCountry() : powerByCountry();
+    const max = Math.max(1, ...Object.values(agg).map(a => a.total));
+    for (const [a2, a] of Object.entries(agg)) {
+      const pos = posOf(a2, a.news.map(n => n.place)); if (!pos) continue;
+      const t = Math.min(1, Math.log(a.total + 1) / Math.log(max + 1));
+      const what = mode === 'cyb'
+        ? [a.ransom && plural(a.ransom, 'ataque de ransomware', 'ataques de ransomware'), a.news.length && plural(a.news.length, 'notícia', 'notícias')].filter(Boolean).join(' + ')
+        : plural(a.news.length, 'notícia de apagão', 'notícias de apagão');
+      out.push({ ...pos, el: bubble(mode, a.total, t, `${ptName(a2)} · ${what}`, () => showTopicCountry(a2, mode, true), a.total >= 2) });
     }
   }
   world.htmlElementsData(out);
+  renderLegend();
 }
+
+// Agrupa por país: ransomware (72 h) + notícias localizadas
+function cyberByCountry() {
+  const m = {};
+  for (const [a2, r] of Object.entries(state.ransom)) m[a2] = { ransom: r.count, news: [], total: r.count };
+  for (const n of state.cyberNews) {
+    if (!n.place || !n.place.cc) continue;
+    const a = (m[n.place.cc] ||= { ransom: 0, news: [], total: 0 });
+    a.news.push(n); a.total++;
+  }
+  return m;
+}
+function powerByCountry() {
+  const m = {};
+  for (const n of state.powerNews) {
+    if (!n.place || !n.place.cc) continue;
+    const a = (m[n.place.cc] ||= { ransom: 0, news: [], total: 0 });
+    a.news.push(n); a.total++;
+  }
+  return m;
+}
+
+function renderLegend() {
+  const el = document.getElementById('legend');
+  const b = (kind, txt, sm) => `<span class="b ${sm ? 'sm' : ''}" style="${kind === 'net' ? 'background:var(--alert);color:#fff' : kind === 'cyb' ? 'background:var(--ink);color:var(--paper)' : 'background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)'}">${txt}</span>`;
+  const m = state.mode;
+  el.innerHTML = m === 'net'
+    ? `<span class="it">${b('net', '4')} regiões com queda no país</span><span class="it">${b('net', '', 1)} 1 região ou só o país</span><span class="it">maior = mais grave · clique para abrir</span>`
+    : m === 'cyb'
+    ? `<span class="it">${b('cyb', '4')} ransomware + notícias no país</span><span class="it">${b('cyb', '', 1)} 1 ocorrência</span><span class="it">clique para ver</span>`
+    : `<span class="it">${b('pwr', '4')} notícias de apagão no país</span><span class="it">${b('pwr', '', 1)} 1 notícia</span><span class="it">clique para ver</span>`;
+}
+
 function groupByPlace(items) {
   const m = new Map();
   for (const it of items) {
@@ -483,9 +656,11 @@ const detail = document.getElementById('detail');
 function openDetail(html) {
   document.getElementById('detailBody').innerHTML = html;
   detail.style.display = 'block';
+  document.body.classList.add('detail-open');
 }
 function closeDetail() {
   detail.style.display = 'none';
+  document.body.classList.remove('detail-open');
   selected = null; refreshPolys();
   document.querySelectorAll('ul.list li.sel').forEach(li => li.classList.remove('sel'));
 }
@@ -533,6 +708,19 @@ function showRansom(a2) {
 function hl(n) {
   return `<div class="hl"><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title)}</a><small>${esc(n.source)} · ${ago(n.date)}</small></div>`;
 }
+function showTopicCountry(a2, kind, fly) {
+  const f = byA2[a2];
+  const agg = (kind === 'cyb' ? cyberByCountry() : powerByCountry())[a2] || { ransom: 0, news: [] };
+  selected = f || null; refreshPolys();
+  const pos = posOf(a2, agg.news.map(n => n.place));
+  if (fly && pos) flyTo(pos.lat, pos.lng, 1.6);
+  const r = kind === 'cyb' && state.ransom[a2];
+  openDetail(
+    `<div class="kind"><span class="sym ${kind}"></span>${kind === 'cyb' ? 'Ciberataques' : 'Apagões · notícias'}</div><h2>${esc(ptName(a2))}</h2>` +
+    (r ? `<div class="sec">Ransomware reivindicado · 72 h</div>` + rows([['Ataques', r.count], ...topN(r.sectors, 3)]) : '') +
+    (agg.news.length ? `<div class="sec">Notícias · 24 h</div>` + agg.news.slice(0, 10).map(n =>
+      `<div class="hl"><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title)}</a><small>${n.place.type === 'city' ? '◎ ' + esc(n.place.name) + ' · ' : ''}${esc(n.source)} · ${ago(n.date)}</small></div>`).join('') : ''));
+}
 function showNews(g, kind) {
   selected = byA2[g.cc] || null; refreshPolys();
   flyTo(g.lat, g.lng, 1.4);
@@ -564,7 +752,7 @@ function newsItems(list, kind) {
     (n.place ? `<span class="pl">◎ ${esc(n.place.type === 'country' ? ptName(n.place.cc, n.place.name) : n.place.name)}</span>` : '<span>sem local</span>') +
     `<span>${esc(n.source)}</span><span>${ago(n.date)}</span><a class="open" href="${esc(n.url)}" target="_blank" rel="noopener" title="Abrir notícia">↗</a></div>`,
     () => {
-      if (n.place) showNews(groupByPlace([...(kind === 'cyb' ? state.cyberNews : state.powerNews)]).find(g => g.items.includes(n)), kind);
+      if (n.place && n.place.cc) showTopicCountry(n.place.cc, kind, true);
       else window.open(n.url, '_blank', 'noopener');
     }));
 }
@@ -606,7 +794,7 @@ function render() {
   if (e2) document.getElementById('listRansom').innerHTML = e2;
   else fill('listRansom', rs.map(([a2, r]) => li(
     `<div class="row1"><span class="sym cyb"></span><span class="nm">${esc(ptName(a2))}</span><span class="sc">${topN(r.sectors, 1).map(x => esc(x[0])).join('')}</span><span class="mono" style="min-width:22px;text-align:right">${r.count}</span></div>`,
-    () => showRansom(a2))).concat(state.ransomUnknown ? [li(`<div class="row1"><span class="sym cyb"></span><span class="nm">País não informado</span><span class="mono">${state.ransomUnknown}</span></div>`, () => {})] : []),
+    () => showTopicCountry(a2, 'cyb', true))).concat(state.ransomUnknown ? [li(`<div class="row1"><span class="sym cyb"></span><span class="nm">País não informado</span><span class="mono">${state.ransomUnknown}</span></div>`, () => {})] : []),
     'Nenhum ataque reivindicado nas últimas 72 h.');
   const e3 = err('news');
   if (e3) { document.getElementById('listCyberNews').innerHTML = e3; document.getElementById('listPowerNews').innerHTML = e3; }
@@ -661,27 +849,26 @@ document.getElementById('refresh').onclick = loadAll;
 
 /* ---------- UI wiring ---------- */
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  state.mode = b.dataset.tab;
   document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', String(x === b)));
-  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'pane-' + b.dataset.tab));
-});
-document.querySelectorAll('.layer').forEach(b => b.onclick = () => {
-  const k = b.dataset.layer;
-  state.layers[k] = !state.layers[k];
-  b.setAttribute('aria-pressed', String(state.layers[k]));
-  refreshPolys(); buildMarkers();
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'pane-' + state.mode));
+  detail.style.display = 'none'; selected = null; expanded.clear(); refreshPolys();
+  buildMarkers();
 });
 
-world.backgroundColor(isDark() ? '#000000' : '#ffffff');
+world.backgroundColor('rgba(0,0,0,0)');
 fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
   .then(r => r.json())
   .then(async topo => {
     allFeatures = topojson.feature(topo, topo.objects.countries).features;
     coastLines = topojson.mesh(topo, topo.objects.countries, (a, b) => a === b).coordinates;
+    borderLines = topojson.mesh(topo, topo.objects.countries, (a, b) => a !== b).coordinates;
     features = allFeatures
       .filter(f => f.properties.name !== 'Antarctica')
       .map(f => Object.assign(f, { a2: NUM2A2[f.id] || (f.properties.name === 'Kosovo' ? 'XK' : '') }));
     for (const f of features) { f.c = centroid(f); if (f.a2) byA2[f.a2] = f; }
     await applyTheme();
+    buildDots();
     render();
     loadAll();
     setInterval(loadAll, REFRESH_MS);
