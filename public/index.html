@@ -20,7 +20,7 @@
     --alert:#ff3b30; --ink:#fff; --paper:#000;
   }
   :root[data-theme="light"]{
-    --bg:#fff; --panel:rgba(255,255,255,.85); --line:rgba(0,0,0,.12); --line-strong:rgba(0,0,0,.5);
+    --bg:#ecece9; --panel:rgba(255,255,255,.92); --line:rgba(0,0,0,.12); --line-strong:rgba(0,0,0,.5);
     --text:#000; --muted:#6b6b6b; --hover:rgba(0,0,0,.06); --chip:rgba(0,0,0,.04);
     --alert:#e0241b; --ink:#000; --paper:#fff;
   }
@@ -388,12 +388,12 @@ function buildTexture() {
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const ctx = c.getContext('2d');
   ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 3;
+  ctx.strokeStyle = ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = dark ? 3 : 3.6;
   if (dark) { ctx.shadowColor = 'rgba(255,255,255,.85)'; ctx.shadowBlur = 10; }
   for (const o of [-W, 0, W]) { trace(ctx, coastLines, o, false); ctx.stroke(); }
   ctx.shadowBlur = 0;
   // fronteiras: finas e mais apagadas que o litoral, para separar os países sem poluir
-  ctx.globalAlpha = dark ? 0.6 : 0.5; ctx.lineWidth = 1.8;
+  ctx.globalAlpha = dark ? 0.6 : 0.45; ctx.lineWidth = dark ? 1.8 : 2.2;
   for (const o of [-W, 0, W]) { trace(ctx, borderLines, o, false); ctx.stroke(); }
   ctx.globalAlpha = 1;
   return new Promise(res => c.toBlob(b => {
@@ -421,8 +421,14 @@ function makeStars() {
 }
 function drawStars(time = 0) {
   const dark = isDark();
-  sctx.fillStyle = dark ? '#000' : '#fff';
+  sctx.fillStyle = dark ? '#000' : '#ecece9';
   sctx.fillRect(0, 0, starW, starH);
+  if (!dark) {                                         // tema claro: sem estrelas, só uma luz suave no centro
+    const g = sctx.createRadialGradient(starW * .6, starH * .48, 0, starW * .6, starH * .48, Math.max(starW, starH) * .65);
+    g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    sctx.fillStyle = g; sctx.fillRect(0, 0, starW, starH);
+    return;
+  }
   if (dark) {                                          // brilho bem suave, como uma nebulosa distante
     const g = sctx.createRadialGradient(starW * .62, starH * .45, 0, starW * .62, starH * .45, Math.max(starW, starH) * .7);
     g.addColorStop(0, 'rgba(255,255,255,0.05)'); g.addColorStop(1, 'rgba(255,255,255,0)');
@@ -553,9 +559,9 @@ function recolorDots() {
   if (!dotLayers) return;
   const dark = isDark();
   dotLayers.land.material.color.set(dark ? '#ffffff' : '#000000');
-  dotLayers.land.material.opacity = dark ? 0.95 : 0.8;
+  dotLayers.land.material.opacity = dark ? 0.95 : 0.7;
   dotLayers.sea.material.color.set(dark ? '#ffffff' : '#000000');
-  dotLayers.sea.material.opacity = dark ? 0.5 : 0.35;
+  dotLayers.sea.material.opacity = dark ? 0.5 : 0.4;
 }
 
 // filtragem anisotrópica: deixa as linhas nítidas quando vistas de lado (bordas do globo e polos)
@@ -567,14 +573,31 @@ function sharpenTexture(tries = 20) {
 }
 async function applyTheme() {
   const dark = isDark();
-  world.backgroundColor('rgba(0,0,0,0)').atmosphereColor(dark ? '#ffffff' : '#9a9a9a');
+  world.backgroundColor('rgba(0,0,0,0)')
+    .atmosphereColor(dark ? '#ffffff' : '#000000')
+    .atmosphereAltitude(dark ? 0.16 : 0.07);
+  // no tema claro, a iluminação deixava o globo cinza e sujo: um brilho próprio quase branco deixa ele limpo
+  litGlobe();
   drawStars();
   if (allFeatures.length) {
     world.globeImageUrl(await buildTexture());
     recolorDots();
     sharpenTexture();
+    setTimeout(litGlobe, 300);
   }
   refreshPolys();
+}
+function litGlobe(tries = 20) {
+  // o brilho usa a própria textura como máscara: o branco fica branco e as linhas pretas continuam pretas
+  const mat = world.globeMaterial(), dark = isDark();
+  // espera a textura do tema atual carregar (senão o brilho usaria a do tema anterior)
+  const ready = mat.map && mat.map.image && mat.map.image.src === textureUrl;
+  if (!dark && !ready) return tries && setTimeout(() => litGlobe(tries - 1), 150);
+  mat.emissiveMap = dark ? null : mat.map;
+  mat.emissive.set(dark ? '#000000' : '#ffffff');
+  mat.emissiveIntensity = dark ? 1 : 0.82;
+  mat.shininess = dark ? 30 : 0;
+  mat.needsUpdate = true;
 }
 function refreshPolys() {
   world.polygonCapColor(world.polygonCapColor()).polygonSideColor(world.polygonSideColor())
