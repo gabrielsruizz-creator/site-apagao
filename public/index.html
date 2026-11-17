@@ -4,59 +4,88 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Monitor de Apagões</title>
+<script>
+  // Apply saved/system theme before paint to avoid a flash
+  (function () {
+    let t = null;
+    try { t = localStorage.getItem('theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <style>
-  :root{
-    --bg:#05070d; --panel:rgba(12,16,28,.88); --line:rgba(255,255,255,.09);
-    --text:#e8ecf4; --muted:#8a94a8; --ok:#3ecf8e; --warn:#f5a524; --bad:#ef4444; --accent:#60a5fa;
+  :root, :root[data-theme="dark"]{
+    --bg:#000; --panel:rgba(0,0,0,.78); --line:rgba(255,255,255,.14); --line-strong:rgba(255,255,255,.45);
+    --text:#fff; --muted:#9a9a9a; --hover:rgba(255,255,255,.08); --chip:rgba(255,255,255,.06);
+    --alert:#ff3b30;
+  }
+  :root[data-theme="light"]{
+    --bg:#fff; --panel:rgba(255,255,255,.82); --line:rgba(0,0,0,.12); --line-strong:rgba(0,0,0,.5);
+    --text:#000; --muted:#6b6b6b; --hover:rgba(0,0,0,.06); --chip:rgba(0,0,0,.04);
+    --alert:#e0241b;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
-    font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);overflow:hidden;
+    font:14px/1.45 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;transition:background .3s,color .3s}
   #globe{position:fixed;inset:0}
-  .panel{position:fixed;top:16px;left:16px;width:360px;max-height:calc(100% - 32px);overflow:auto;
-    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;
-    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-  h1{font-size:17px;margin:0 0 2px}
-  .sub{color:var(--muted);font-size:12px;margin:0 0 12px}
-  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
-  .dot.live{background:var(--ok);box-shadow:0 0 0 0 rgba(62,207,142,.6);animation:pulse 2s infinite}
-  .dot.err{background:var(--bad)}
-  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(62,207,142,0)}100%{box-shadow:0 0 0 0 rgba(62,207,142,0)}}
-  .card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px;background:rgba(255,255,255,.03)}
-  .fact{border-color:rgba(245,165,36,.35);background:rgba(245,165,36,.07)}
-  .fact b{color:var(--warn)}
-  .fact a{color:var(--accent)}
-  .fact ul{margin:6px 0 0;padding-left:18px;font-size:12px}
-  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-  .stat{border:1px solid var(--line);border-radius:10px;padding:8px 10px}
-  .stat .n{font-size:22px;font-weight:650}
-  .stat .l{font-size:11px;color:var(--muted)}
-  .sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:4px 0 6px}
-  #list{list-style:none;margin:0;padding:0}
-  #list li{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer}
-  #list li:hover,#list li.sel{background:rgba(255,255,255,.06)}
-  #list .sw{width:10px;height:10px;border-radius:3px;flex:none}
+  a{color:var(--text);text-underline-offset:2px}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+
+  .panel{position:fixed;top:16px;left:16px;width:350px;max-height:calc(100% - 32px);overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  .top{display:flex;align-items:flex-start;gap:10px}
+  h1{font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin:0 0 4px;flex:1}
+  .sub{color:var(--muted);font-size:12px;margin:0 0 14px}
+  .status{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin-bottom:14px;
+    text-transform:uppercase;letter-spacing:.08em}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
+  .dot.live{background:var(--text);animation:blink 1.6s infinite}
+  .dot.err{background:var(--alert)}
+  @keyframes blink{50%{opacity:.25}}
+
+  .card{border:1px solid var(--line);border-radius:4px;padding:12px;margin-bottom:14px}
+  .card b{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
+  .card p{font-size:12px;margin:0;color:var(--muted)}
+  .card ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+  .card li a{display:inline-block;font-size:11px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;text-decoration:none}
+  .card li a:hover{border-color:var(--line-strong)}
+
+  .stats{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:4px;margin-bottom:14px}
+  .stat{padding:10px 12px}
+  .stat+.stat{border-left:1px solid var(--line)}
+  .stat .n{font-size:28px;font-weight:300;line-height:1.1}
+  .stat .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+
+  .sec{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:4px 0 6px}
+  #list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+  #list li{display:flex;align-items:center;gap:10px;padding:8px 6px;cursor:pointer;border-bottom:1px solid var(--line)}
+  #list li:hover,#list li.sel{background:var(--hover)}
+  #list .sw{width:6px;height:6px;border-radius:50%;background:var(--alert);flex:none}
   #list .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #list .sc{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px}
-  .empty{color:var(--muted);font-size:13px;padding:6px 8px}
-  .legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin:10px 0 4px}
-  .legend .bar{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,#fde68a,#f59e0b,#dc2626,#7f1d1d)}
-  .foot{font-size:11px;color:var(--muted);margin-top:10px}
-  .foot a{color:var(--accent)}
-  button{background:rgba(255,255,255,.07);color:var(--text);border:1px solid var(--line);border-radius:8px;
-    padding:5px 10px;font:inherit;font-size:12px;cursor:pointer}
-  button:hover{background:rgba(255,255,255,.12)}
-  #detail{position:fixed;right:16px;bottom:16px;width:300px;display:none;background:var(--panel);
-    border:1px solid var(--line);border-radius:14px;padding:14px;backdrop-filter:blur(10px)}
-  #detail h2{font-size:16px;margin:0 0 6px}
-  #detail .row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line)}
+  #list .sc{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  #list .bar{width:46px;height:3px;background:var(--line);flex:none;position:relative}
+  #list .bar i{position:absolute;inset:0 auto 0 0;background:var(--text)}
+  .empty{color:var(--muted);font-size:13px;padding:8px 6px;cursor:default!important}
+  .foot{font-size:11px;color:var(--muted);margin-top:14px}
+
+  button{background:var(--chip);color:var(--text);border:1px solid var(--line);border-radius:4px;
+    padding:5px 10px;font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+  button:hover{border-color:var(--line-strong)}
+  #theme{width:30px;height:30px;padding:0;display:grid;place-items:center;flex:none}
+  #theme svg{width:15px;height:15px}
+  :root[data-theme="dark"] .i-sun, :root[data-theme="light"] .i-moon{display:none}
+
+  #detail{position:fixed;right:16px;bottom:16px;width:290px;display:none;background:var(--panel);
+    border:1px solid var(--line);border-radius:4px;padding:16px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  #detail h2{font-size:18px;font-weight:400;margin:0 0 10px}
+  #detail .row{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--line)}
   #detail .row span:first-child{color:var(--muted)}
-  #detail a{color:var(--accent);font-size:12px}
-  #detail .x{position:absolute;top:8px;right:10px;background:none;border:0;font-size:18px;color:var(--muted)}
-  .tip{background:rgba(10,14,24,.95);border:1px solid var(--line);padding:6px 9px;border-radius:8px;font-size:12px;color:var(--text)}
+  #detail .x{position:absolute;top:10px;right:10px;border:0;background:none;font-size:18px;padding:0 4px;text-transform:none}
+  .tip{background:var(--panel);border:1px solid var(--line);padding:6px 9px;border-radius:4px;font-size:12px;color:var(--text)}
+  .tip .a{color:var(--alert)}
   @media (max-width:700px){
-    .panel{top:auto;bottom:0;left:0;right:0;width:auto;max-height:46%;border-radius:14px 14px 0 0}
+    .panel{top:auto;bottom:0;left:0;right:0;width:auto;max-height:46%;border-radius:4px 4px 0 0}
     #detail{left:16px;right:16px;width:auto;top:16px;bottom:auto}
   }
 </style>
@@ -65,37 +94,43 @@
 <div id="globe"></div>
 
 <aside class="panel">
-  <h1>🌍 Monitor de Apagões de Internet</h1>
-  <p class="sub">Quedas de conectividade detectadas nas últimas 24 h, por país</p>
+  <div class="top">
+    <div style="flex:1">
+      <h1>Monitor de apagões</h1>
+      <p class="sub">Quedas de internet detectadas nas últimas 24 h, por país</p>
+    </div>
+    <button id="theme" aria-label="Alternar tema claro/escuro" title="Alternar tema">
+      <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
 
-  <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Carregando dados…</span>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Carregando…</span>
     <span style="flex:1"></span><button id="refresh">Atualizar</button></div>
 
-  <div class="card fact">
-    <b>⚠️ Checagem: boato do "apagão mundial de 17/11"</b>
-    <div style="font-size:12px;margin-top:4px">Veículos de checagem e autoridades dizem que não há evidência de
-      apagão global nem de ataque cibernético coordenado. O teste de alerta da FEMA nos EUA é só um teste de transmissão.</div>
+  <div class="card">
+    <b>Checagem · boato de 17/11</b>
+    <p>Não há evidência de apagão mundial nem de ataque cibernético coordenado. Autoridades e checadores
+      desmentiram o boato, e o alerta da FEMA nos EUA é só um teste de transmissão.</p>
     <ul>
       <li><a href="https://www.cnnbrasil.com.br/economia/money/tecnologia/apagao-mundial-hoje-entenda-teoria-que-viraliza-nas-redes-sociais/" target="_blank" rel="noopener">CNN Brasil</a></li>
       <li><a href="https://www.techtudo.com.br/noticias/2026/11/apagao-mundial-vai-acontecer-hoje-entenda-boato-que-viralizou-edsoftwares.ghtml" target="_blank" rel="noopener">TechTudo</a></li>
       <li><a href="https://www.metropoles.com/mundo/apagao-mundial-em-17-de-novembro-o-que-ha-de-real-e-o-que-e-fake-news" target="_blank" rel="noopener">Metrópoles</a></li>
-      <li><a href="https://www.ctpost.com/news/article/fema-emergency-alert-test-cyberattack-blackout-22534888.php" target="_blank" rel="noopener">FEMA: sem apagão (CT Post)</a></li>
+      <li><a href="https://www.ctpost.com/news/article/fema-emergency-alert-test-cyberattack-blackout-22534888.php" target="_blank" rel="noopener">FEMA</a></li>
     </ul>
   </div>
 
   <div class="stats">
-    <div class="stat"><div class="n" id="nCountries">–</div><div class="l">países com queda detectada</div></div>
-    <div class="stat"><div class="n" id="nEvents">–</div><div class="l">eventos registrados</div></div>
+    <div class="stat"><div class="n" id="nCountries">–</div><div class="l">países com queda</div></div>
+    <div class="stat"><div class="n" id="nEvents">–</div><div class="l">eventos</div></div>
   </div>
 
-  <div class="legend"><span>leve</span><div class="bar"></div><span>grave</span></div>
-  <div class="sec">Países afetados (maior gravidade primeiro)</div>
+  <div class="sec">Países afetados · por gravidade</div>
   <ul id="list"><li class="empty">Carregando…</li></ul>
 
-  <div class="foot">Dados: <a href="https://ioda.inetintel.cc.gatech.edu/" target="_blank" rel="noopener">IODA</a> (Georgia Tech),
-    que mede BGP, ping ativo e telescópio de rede. Atualiza sozinho a cada 5 min.
-    Uma queda detectada aqui <b>não</b> quer dizer ataque cibernético; as causas mais comuns são falta de energia,
-    cortes de cabo e bloqueios governamentais.</div>
+  <div class="foot">Dados: <a href="https://ioda.inetintel.cc.gatech.edu/" target="_blank" rel="noopener">IODA</a> (Georgia Tech).
+    Atualiza a cada 5 min. Uma queda detectada <b>não</b> quer dizer ataque cibernético; as causas mais comuns
+    são falta de energia, cortes de cabo e bloqueios governamentais.</div>
 </aside>
 
 <div id="detail"><button class="x" id="closeDetail" aria-label="Fechar">×</button><div id="detailBody"></div></div>
@@ -107,55 +142,152 @@ const NUM2A2 = {"100":"BG","104":"MM","108":"BI","112":"BY","116":"KH","120":"CM
 const IODA = 'https://api.ioda.inetintel.cc.gatech.edu/v2/outages/summary';
 const REFRESH_MS = 5 * 60 * 1000;
 const names = (() => { try { return new Intl.DisplayNames(['pt-BR'], { type: 'region' }); } catch { return null; } })();
-const ptName = (a2, fallback) => { try { return (names && names.of(a2)) || fallback || a2; } catch { return fallback || a2; } };
+const ptName = (a2, fallback) => { try { return (names && a2 && names.of(a2)) || fallback || a2; } catch { return fallback || a2; } };
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const isDark = () => document.documentElement.dataset.theme !== 'light';
 
-let outages = {};          // alpha2 -> {score, events, name}
+let outages = {};          // alpha2 -> {score, events, name, parts}
 let maxLog = 1;
 let selected = null;
-let features = [];
+let features = [];         // country features (for interaction)
+let allFeatures = [];      // incl. Antarctica (for the texture)
+let coastLines = [];       // exterior arcs only (coastlines, no internal borders)
+let textureUrl = null;
 
-const colorFor = (score) => {
-  if (!score) return 'rgba(70,90,130,0.55)';
-  const t = Math.min(1, Math.log10(score + 1) / maxLog);
-  const stops = [[253,230,138],[245,158,11],[220,38,38],[127,29,29]];
-  const x = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x)), f = x - i;
-  const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
-  return `rgba(${c[0]},${c[1]},${c[2]},0.92)`;
-};
+const norm = (score) => score ? Math.min(1, Math.log10(score + 1) / maxLog) : 0;
 const severity = (score) => {
   if (!score) return 'sem queda';
-  const t = Math.log10(score + 1) / maxLog;
+  const t = norm(score);
   return t > .75 ? 'grave' : t > .5 ? 'alta' : t > .25 ? 'moderada' : 'leve';
 };
 const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
+const alertRGBA = (a) => (isDark() ? `rgba(255,59,48,${a})` : `rgba(224,36,27,${a})`);
 
+/* ---------- Dotted globe texture (equirectangular canvas) ---------- */
+function buildTexture() {
+  const W = 8192, H = 4096;
+  const dark = isDark();
+  const ink = dark ? '#ffffff' : '#000000';
+  const paper = dark ? '#000000' : '#ffffff';
+  const px = (lng) => (lng + 180) / 360 * W;
+  const py = (lat) => (90 - lat) / 180 * H;
+
+  // Trace each ring, unwrapping across the antimeridian, then draw at x offsets -W, 0, +W.
+  const ringsOf = (f) => f.geometry.type === 'Polygon' ? f.geometry.coordinates : f.geometry.coordinates.flat();
+  const tracePath = (ctx, offset) => {
+    ctx.beginPath();
+    for (const f of allFeatures) for (const ring of ringsOf(f)) {
+      let prev = null, shift = 0;
+      ring.forEach(([lng, lat], i) => {
+        if (prev !== null) { const d = lng - prev; if (d > 180) shift -= 360; else if (d < -180) shift += 360; }
+        prev = lng;
+        const x = px(lng + shift) + offset, y = py(lat);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+      ctx.closePath();
+    }
+  };
+
+  // Land mask
+  const mask = document.createElement('canvas'); mask.width = W / 4; mask.height = H / 4;
+  const m = mask.getContext('2d', { willReadFrequently: true });
+  m.scale(0.25, 0.25); m.fillStyle = '#fff';
+  for (const o of [-W, 0, W]) { tracePath(m, o); m.fill('evenodd'); }
+  const md = m.getImageData(0, 0, mask.width, mask.height).data;
+  const isLand = (x, y) => md[((Math.min(mask.height - 1, y >> 2) * mask.width) + Math.min(mask.width - 1, x >> 2)) * 4] > 127;
+
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
+
+  // Dots: spacing is constant on the sphere (x-step widens toward the poles).
+  const drawDots = (step, r, alpha, wantLand) => {
+    ctx.fillStyle = ink; ctx.globalAlpha = alpha;
+    for (let y = step / 2; y < H; y += step) {
+      const lat = 90 - y / H * 180;
+      const k = Math.max(0.08, Math.cos(lat * Math.PI / 180));
+      const sx = step / k;
+      const off = (Math.round(y / step) % 2) * sx / 2;
+      for (let x = off; x < W; x += sx) {
+        if (isLand(x | 0, y | 0) !== wantLand) continue;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
+      }
+    }
+  };
+  drawDots(15, 2.6, dark ? 0.95 : 0.85, true);   // dense land
+  drawDots(46, 3.2, dark ? 0.75 : 0.5, false);   // sparse ocean
+  ctx.globalAlpha = 1;
+
+  // Coastlines: soft glow + crisp line
+  const traceLines = (offset) => {
+    ctx.beginPath();
+    for (const line of coastLines) {
+      let prev = null, shift = 0;
+      line.forEach(([lng, lat], i) => {
+        if (prev !== null) { const d = lng - prev; if (d > 180) shift -= 360; else if (d < -180) shift += 360; }
+        prev = lng;
+        const x = px(lng + shift) + offset, y = py(lat);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+    }
+  };
+  ctx.strokeStyle = ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  if (dark) { ctx.shadowColor = 'rgba(255,255,255,.85)'; ctx.shadowBlur = 10; }
+  ctx.lineWidth = 3;
+  for (const o of [-W, 0, W]) { traceLines(o); ctx.stroke(); }
+  ctx.shadowBlur = 0;
+
+  return new Promise(res => c.toBlob(b => {
+    if (textureUrl) URL.revokeObjectURL(textureUrl);
+    textureUrl = URL.createObjectURL(b); res(textureUrl);
+  }));
+}
+
+/* ---------- Globe ---------- */
 const world = Globe()(document.getElementById('globe'))
-  .backgroundColor('#05070d')
-  .showAtmosphere(true).atmosphereColor('#3b82f6').atmosphereAltitude(0.18)
-  .polygonCapColor(d => d === selected ? '#93c5fd' : colorFor(outages[d.a2]?.score))
-  .polygonSideColor(() => 'rgba(0,0,0,0.25)')
-  .polygonStrokeColor(() => 'rgba(160,180,220,0.35)')
-  .polygonAltitude(d => d === selected ? 0.05 : outages[d.a2] ? 0.012 + 0.03 * Math.log10(outages[d.a2].score + 1) / maxLog : 0.006)
+  .showAtmosphere(true).atmosphereAltitude(0.16)
+  .polygonCapColor(d => {
+    const o = outages[d.a2];
+    if (d === selected) return isDark() ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)';
+    return o ? alertRGBA(0.25 + 0.55 * norm(o.score)) : 'rgba(0,0,0,0)';
+  })
+  .polygonSideColor(d => outages[d.a2] ? alertRGBA(0.35) : 'rgba(0,0,0,0)')
+  .polygonStrokeColor(d => outages[d.a2] ? alertRGBA(0.95) : (d === selected ? css('--text') : 'rgba(0,0,0,0)'))
+  .polygonAltitude(d => d === selected ? 0.03 : outages[d.a2] ? 0.006 + 0.02 * norm(outages[d.a2].score) : 0.002)
   .polygonLabel(d => {
     const o = outages[d.a2];
     return `<div class="tip"><b>${ptName(d.a2, d.properties.name)}</b><br>` +
-      (o ? `Queda ${severity(o.score)} · ${o.events} evento(s)` : 'Nenhuma queda detectada') + '</div>';
+      (o ? `<span class="a">●</span> Queda ${severity(o.score)} · ${o.events} evento(s)` : 'Nenhuma queda detectada') + '</div>';
   })
   .onPolygonClick(d => select(d))
   .polygonsTransitionDuration(400)
-  .ringColor(() => t => `rgba(239,68,68,${1 - t})`)
+  .ringColor(() => t => alertRGBA(1 - t))
   .ringMaxRadius(d => 2 + 4 * d.t).ringPropagationSpeed(2).ringRepeatPeriod(d => 1400 - 600 * d.t);
 
-const mat = world.globeMaterial();
-mat.color.set('#0b1324'); mat.emissive && mat.emissive.set('#060b16');
 world.controls().autoRotate = true;
-world.controls().autoRotateSpeed = 0.35;
-world.pointOfView({ lat: 10, lng: -40, altitude: 2.3 });
+world.controls().autoRotateSpeed = 0.4;
+world.pointOfView({ lat: 15, lng: -40, altitude: 2.3 });
 addEventListener('resize', () => world.width(innerWidth).height(innerHeight));
 
+async function applyTheme() {
+  const dark = isDark();
+  world.backgroundColor(dark ? '#000000' : '#ffffff').atmosphereColor(dark ? '#ffffff' : '#9a9a9a');
+  if (allFeatures.length) world.globeImageUrl(await buildTexture());
+  refreshStyles();
+}
+function refreshStyles() {
+  world.polygonCapColor(world.polygonCapColor()).polygonSideColor(world.polygonSideColor())
+    .polygonStrokeColor(world.polygonStrokeColor()).polygonAltitude(world.polygonAltitude());
+}
+document.getElementById('theme').onclick = () => {
+  const next = isDark() ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('theme', next); } catch (e) {}
+  applyTheme(); render();
+};
+
 function centroid(f) {
-  // average of the largest ring's points (good enough to place a marker)
-  let rings = f.geometry.type === 'Polygon' ? [f.geometry.coordinates[0]] : f.geometry.coordinates.map(p => p[0]);
+  const rings = f.geometry.type === 'Polygon' ? [f.geometry.coordinates[0]] : f.geometry.coordinates.map(p => p[0]);
   const ring = rings.sort((a, b) => b.length - a.length)[0];
   let x = 0, y = 0; ring.forEach(([lng, lat]) => { x += lng; y += lat; });
   return { lng: x / ring.length, lat: y / ring.length };
@@ -163,31 +295,32 @@ function centroid(f) {
 
 function select(f) {
   selected = f;
-  world.polygonCapColor(world.polygonCapColor()).polygonAltitude(world.polygonAltitude());
-  document.querySelectorAll('#list li').forEach(li => li.classList.toggle('sel', li.dataset.a2 === f?.a2));
+  refreshStyles();
+  document.querySelectorAll('#list li').forEach(li => li.classList.toggle('sel', !!f && li.dataset.a2 === f.a2));
   const box = document.getElementById('detail');
   if (!f) { box.style.display = 'none'; return; }
   const o = outages[f.a2];
   const c = centroid(f);
   world.controls().autoRotate = false;
   world.pointOfView({ lat: c.lat, lng: c.lng, altitude: 1.6 }, 900);
+  const label = { bgp: 'BGP (rotas)', 'ping-slash24': 'Ping ativo', 'merit-nt': 'Telescópio de rede', gtr: 'Google (tráfego)' };
   document.getElementById('detailBody').innerHTML =
     `<h2>${ptName(f.a2, f.properties.name)}</h2>` +
-    (o ? `<div class="row"><span>Gravidade</span><span>${severity(o.score)}</span></div>
-          <div class="row"><span>Pontuação IODA</span><span>${fmt(o.score)}</span></div>
-          <div class="row"><span>Eventos (24 h)</span><span>${o.events}</span></div>
-          ${Object.entries(o.parts).map(([k, v]) => `<div class="row"><span>${({ bgp: 'BGP (rotas)', 'ping-slash24': 'Ping ativo', 'merit-nt': 'Telescópio de rede', gtr: 'Google (tráfego)' })[k] || k}</span><span>${fmt(v)}</span></div>`).join('')}`
-       : `<div class="row"><span>Status</span><span style="color:var(--ok)">Nenhuma queda detectada</span></div>`) +
-    `<p style="margin:10px 0 0"><a href="https://ioda.inetintel.cc.gatech.edu/country/${f.a2}" target="_blank" rel="noopener">Ver gráficos no IODA ↗</a></p>`;
+    (o ? `<div class="row"><span>Gravidade</span><span style="color:var(--alert)">${severity(o.score)}</span></div>
+          <div class="row"><span>Pontuação IODA</span><span class="mono">${fmt(o.score)}</span></div>
+          <div class="row"><span>Eventos (24 h)</span><span class="mono">${o.events}</span></div>
+          ${Object.entries(o.parts).map(([k, v]) => `<div class="row"><span>${label[k] || k}</span><span class="mono">${fmt(v)}</span></div>`).join('')}`
+       : `<div class="row"><span>Status</span><span>Nenhuma queda detectada</span></div>`) +
+    `<p style="margin:12px 0 0;font-size:12px"><a href="https://ioda.inetintel.cc.gatech.edu/country/${f.a2}" target="_blank" rel="noopener">Ver gráficos no IODA ↗</a></p>`;
   box.style.display = 'block';
 }
 document.getElementById('closeDetail').onclick = () => { select(null); world.controls().autoRotate = true; };
 
 function render() {
-  const logs = Object.values(outages).map(o => Math.log10(o.score + 1));
-  maxLog = Math.max(1, ...logs);
+  maxLog = Math.max(1, ...Object.values(outages).map(o => Math.log10(o.score + 1)));
   world.polygonsData(features);
-  const hot = features.filter(f => outages[f.a2]).map(f => ({ ...centroid(f), t: Math.log10(outages[f.a2].score + 1) / maxLog }));
+  refreshStyles();
+  const hot = features.filter(f => outages[f.a2]).map(f => ({ ...centroid(f), t: norm(outages[f.a2].score) }));
   world.ringsData(hot.filter(h => h.t > 0.35));
 
   const sorted = Object.entries(outages).sort((a, b) => b[1].score - a[1].score);
@@ -198,7 +331,9 @@ function render() {
   for (const [a2, o] of sorted) {
     const li = document.createElement('li');
     li.dataset.a2 = a2;
-    li.innerHTML = `<span class="sw" style="background:${colorFor(o.score)}"></span><span class="nm">${ptName(a2, o.name)}</span><span class="sc">${severity(o.score)}</span>`;
+    if (selected && selected.a2 === a2) li.classList.add('sel');
+    li.innerHTML = `<span class="sw"></span><span class="nm">${ptName(a2, o.name)}</span>` +
+      `<span class="sc">${severity(o.score)}</span><span class="bar"><i style="width:${Math.round(norm(o.score) * 100)}%"></i></span>`;
     li.onclick = () => { const f = features.find(x => x.a2 === a2); if (f) select(f); };
     list.appendChild(li);
   }
@@ -230,22 +365,25 @@ async function loadOutages() {
     }
     outages = next;
     render();
-    setStatus('live', 'Ao vivo · atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+    setStatus('live', 'Ao vivo · ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
   } catch (e) {
     console.error(e);
-    setStatus('err', 'Não consegui acessar o IODA (' + e.message + '). Tento de novo em 5 min.');
-    if (!features.length) return;
-    render();
+    setStatus('err', 'IODA indisponível (' + e.message + ') · nova tentativa em 5 min');
+    if (features.length) render();
   }
 }
 document.getElementById('refresh').onclick = loadOutages;
 
+world.backgroundColor(isDark() ? '#000000' : '#ffffff');
 fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
   .then(r => r.json())
-  .then(topo => {
-    features = topojson.feature(topo, topo.objects.countries).features
+  .then(async topo => {
+    allFeatures = topojson.feature(topo, topo.objects.countries).features;
+    coastLines = topojson.mesh(topo, topo.objects.countries, (a, b) => a === b).coordinates;
+    features = allFeatures
       .filter(f => f.properties.name !== 'Antarctica')
       .map(f => Object.assign(f, { a2: NUM2A2[f.id] || (f.properties.name === 'Kosovo' ? 'XK' : '') }));
+    await applyTheme();
     render();
     loadOutages();
     setInterval(loadOutages, REFRESH_MS);
