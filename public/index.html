@@ -123,9 +123,25 @@
   .mk.hide{opacity:0;pointer-events:none}
   .mk:hover{z-index:5}
   .mk .shp{display:block;position:relative}
-  .mk.net .shp{width:var(--s);height:var(--s);border-radius:50%;background:var(--alert);box-shadow:0 0 0 1.5px var(--paper)}
-  .mk.net .shp::after{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--alert);animation:ping 2s infinite}
-  @keyframes ping{from{transform:scale(1);opacity:.9}to{transform:scale(3);opacity:0}}
+  /* country bubble: number of affected regions */
+  .mk.clu{width:auto;height:auto}
+  .mk.clu .shp{min-width:var(--s);height:var(--s);padding:0 6px;border-radius:999px;display:grid;place-items:center;
+    background:var(--alert);color:#fff;font:600 11px/1 ui-monospace,"SF Mono",Menlo,monospace;
+    box-shadow:0 0 0 2px var(--paper),0 2px 10px rgba(0,0,0,.35);transition:transform .15s}
+  .mk.clu .shp::after{content:"";position:absolute;inset:-2px;border-radius:999px;border:1.5px solid var(--alert);opacity:0;animation:halo 2.8s ease-out infinite}
+  .mk.clu.calm .shp::after{animation:none}
+  .mk.clu:hover .shp{transform:scale(1.12)}
+  .mk.clu.dot .shp{min-width:10px;width:10px;height:10px;padding:0}
+  @keyframes halo{0%{transform:scale(1);opacity:.7}70%,100%{transform:scale(1.9);opacity:0}}
+  /* individual region (after expanding) */
+  .mk.reg{width:20px;height:20px}
+  .mk.reg .shp{width:var(--s);height:var(--s);border-radius:50%;background:var(--alert);border:1.5px solid var(--paper);
+    opacity:var(--o);animation:pop .35s cubic-bezier(.2,1.4,.4,1) both;animation-delay:var(--d)}
+  .mk.reg:hover .shp{opacity:1;transform:scale(1.25)}
+  @keyframes pop{from{transform:scale(0)}to{transform:scale(1)}}
+  .mk.reg.named .lbl{display:block;left:16px;top:-2px;padding:2px 6px;font-size:10px;pointer-events:none;
+    animation:fade .4s both;animation-delay:var(--d)}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
   .mk.cyb .shp{width:10px;height:10px;background:var(--paper);border:1.5px solid var(--ink);transform:rotate(45deg)}
   .mk.cyb.big .shp{width:13px;height:13px;background:var(--ink);box-shadow:0 0 0 1.5px var(--paper)}
   .mk.pwr .shp{width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid var(--ink);
@@ -243,6 +259,8 @@ const state = {
 };
 let maxLog = 1, regMaxLog = 1;
 let selected = null;
+const expanded = new Set();   // países abertos com clique
+let zoomedIn = false;          // perto o bastante para abrir todos
 let features = [], allFeatures = [], coastLines = [], byA2 = {};
 let textureUrl = null;
 
@@ -310,10 +328,10 @@ const world = Globe()(document.getElementById('globe'))
   .polygonCapColor(d => {
     const o = state.layers.net && state.countries[d.a2];
     if (d === selected) return isDark() ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)';
-    return o ? alertRGBA(0.18 + 0.5 * norm(o.score)) : 'rgba(0,0,0,0)';
+    return o ? alertRGBA(0.1 + 0.3 * norm(o.score)) : 'rgba(0,0,0,0)';
   })
   .polygonSideColor(d => state.layers.net && state.countries[d.a2] ? alertRGBA(0.3) : 'rgba(0,0,0,0)')
-  .polygonStrokeColor(d => state.layers.net && state.countries[d.a2] ? alertRGBA(0.9) : (d === selected ? (isDark() ? '#fff' : '#000') : 'rgba(0,0,0,0)'))
+  .polygonStrokeColor(d => state.layers.net && state.countries[d.a2] ? alertRGBA(0.6) : (d === selected ? (isDark() ? '#fff' : '#000') : 'rgba(0,0,0,0)'))
   .polygonAltitude(d => d === selected ? 0.02 : state.layers.net && state.countries[d.a2] ? 0.005 + 0.012 * norm(state.countries[d.a2].score) : 0.002)
   .polygonLabel(d => {
     const o = state.countries[d.a2], r = state.ransom[d.a2];
@@ -321,7 +339,7 @@ const world = Globe()(document.getElementById('globe'))
       (o ? `<span class="a">●</span> Internet: queda ${severity(norm(o.score))}<br>` : 'Internet: sem queda detectada<br>') +
       (r ? `◆ ${r.count} ataque(s) de ransomware (72 h)` : '') + '</div>';
   })
-  .onPolygonClick(d => showCountry(d, true))
+  .onPolygonClick(d => openCountry(d.a2))
   .polygonsTransitionDuration(300)
   .htmlElementsData([])
   .htmlLat('lat').htmlLng('lng').htmlAltitude(0.01)
@@ -378,11 +396,35 @@ function marker(cls, title, onClick, extra = '') {
 function buildMarkers() {
   const out = [];
   if (state.layers.net) {
-    for (const r of state.regions) {
-      const t = norm(r.score, regMaxLog);
-      const el = marker('net', `${r.name}, ${ptName(r.cc)} · queda ${severity(t)}`, () => showRegion(r));
-      el.style.setProperty('--s', (6 + 8 * t).toFixed(1) + 'px');
-      out.push({ lat: r.lat, lng: r.lng, el });
+    const byCc = {};
+    for (const r of state.regions) (byCc[r.cc] ||= []).push(r);
+    for (const a2 of new Set([...Object.keys(state.countries), ...Object.keys(byCc)])) {
+      const regs = (byCc[a2] || []).sort((a, b) => b.score - a.score);
+      // com um país escolhido, só ele abre; sem escolha, o zoom bem de perto abre todos
+      const open = regs.length && (expanded.size ? expanded.has(a2) : zoomedIn);
+      if (open) {
+        regs.forEach((r, i) => {
+          const t = norm(r.score, regMaxLog);
+          const el = marker('reg' + (expanded.has(a2) ? ' named' : ''), expanded.has(a2) ? r.name : `${r.name} · queda ${severity(t)}`, () => showRegion(r));
+          el.style.setProperty('--s', (11 + 7 * t).toFixed(1) + 'px');
+          el.style.setProperty('--o', (0.7 + 0.3 * t).toFixed(2));
+          el.style.setProperty('--d', Math.min(i * 40, 400) + 'ms');
+          out.push({ lat: r.lat, lng: r.lng, el });
+        });
+        continue;
+      }
+      const f = byA2[a2];
+      const pos = f ? f.c : regs.length ? { lat: regs.reduce((s, r) => s + r.lat, 0) / regs.length, lng: regs.reduce((s, r) => s + r.lng, 0) / regs.length } : null;
+      if (!pos) continue;
+      const o = state.countries[a2];
+      const t = o ? norm(o.score) : Math.max(...regs.map(r => norm(r.score, regMaxLog))) * 0.6;
+      const label = regs.length
+        ? `${ptName(a2, o && o.name)} · ${regs.length} ${regs.length > 1 ? 'regiões' : 'região'} com queda · clique para abrir`
+        : `${ptName(a2, o && o.name)} · queda de internet no país`;
+      const el = marker('clu' + (regs.length ? '' : ' dot') + (t < 0.5 ? ' calm' : ''), label, () => openCountry(a2));
+      if (regs.length) el.querySelector('.shp').textContent = regs.length;
+      el.style.setProperty('--s', Math.round(20 + 10 * t) + 'px');
+      out.push({ lat: pos.lat, lng: pos.lng, el });
     }
   }
   if (state.layers.cyb) {
@@ -415,6 +457,27 @@ function groupByPlace(items) {
   return [...m.values()];
 }
 
+function openCountry(a2) {
+  const regs = state.regions.filter(r => r.cc === a2);
+  const f = byA2[a2];
+  if (regs.length) {
+    expanded.clear(); expanded.add(a2);
+    buildMarkers();
+    // enquadra as regiões: quanto mais espalhadas, mais longe a câmera
+    const lats = regs.map(r => r.lat), lngs = regs.map(r => r.lng);
+    const span = Math.max(Math.max(...lats) - Math.min(...lats), Math.max(...lngs) - Math.min(...lngs));
+    const c = { lat: (Math.max(...lats) + Math.min(...lats)) / 2, lng: (Math.max(...lngs) + Math.min(...lngs)) / 2 };
+    flyTo(c.lat, c.lng, Math.min(1.6, Math.max(0.8, span / 20)));
+  }
+  if (f) showCountry(f, !regs.length);
+}
+
+world.onZoom(({ altitude }) => {
+  const z = altitude < 0.6;
+  if (z !== zoomedIn) { zoomedIn = z; buildMarkers(); }
+  if (altitude > 1.9 && expanded.size) { expanded.clear(); buildMarkers(); }
+});
+
 /* ---------- detail card ---------- */
 const detail = document.getElementById('detail');
 function openDetail(html) {
@@ -426,7 +489,7 @@ function closeDetail() {
   selected = null; refreshPolys();
   document.querySelectorAll('ul.list li.sel').forEach(li => li.classList.remove('sel'));
 }
-document.getElementById('closeDetail').onclick = () => { closeDetail(); world.controls().autoRotate = true; };
+document.getElementById('closeDetail').onclick = () => { closeDetail(); expanded.clear(); buildMarkers(); world.controls().autoRotate = true; };
 
 const rows = (pairs) => pairs.map(([k, v]) => `<div class="row"><span>${esc(k)}</span><span>${v}</span></div>`).join('');
 const topN = (obj, n = 3) => Object.entries(obj || {}).sort((a, b) => b[1] - a[1]).slice(0, n);
@@ -529,7 +592,7 @@ function render() {
       `<span class="sc">${o ? severity(t) : 'só regiões'}</span><span class="bar"><i style="width:${Math.round(t * 100)}%"></i></span></div>` +
       (regs.length ? `<div class="subrows">${regs.slice(0, 4).map(r => `<div><span>${esc(r.name)}</span><span>${severity(norm(r.score, regMaxLog))}</span></div>`).join('')}` +
         (regs.length > 4 ? `<div><span>+ ${regs.length - 4} região(ões)</span></div>` : '') + '</div>' : ''),
-      () => { const f = byA2[a2]; if (f) showCountry(f, true); else if (regs[0]) showRegion(regs[0]); });
+      () => openCountry(a2));
   });
   const e1 = err('outages');
   if (e1 && !netItems.length) document.getElementById('listNet').innerHTML = e1;
