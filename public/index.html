@@ -88,6 +88,15 @@
   .chips a:hover{border-color:var(--line-strong)}
 
   .sec{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:14px 0 6px}
+  .sechead{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+  .sechead .sec{margin:0;flex:1}
+  .seg{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .seg button{border:0;border-radius:0;background:none;padding:4px 8px;font-size:10px;color:var(--muted)}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button[aria-pressed="true"]{background:var(--text);color:var(--paper)}
+  .when{font-size:11px;color:var(--muted);margin:2px 0 0 18px}
+  .when .live{color:var(--alert)}
+  .when .live::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--alert);margin-right:5px;vertical-align:1px;animation:blink 1.6s infinite}
   .sec:first-child{margin-top:0}
   ul.list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
   ul.list li{padding:8px 6px;border-bottom:1px solid var(--line);cursor:pointer}
@@ -232,7 +241,13 @@
 
   <div class="scroll">
     <section class="pane on" id="pane-net">
-      <div class="sec">Países e regiões com queda · por gravidade</div>
+      <div class="sechead">
+        <div class="sec" id="netTitle">Quedas de internet</div>
+        <div class="seg" role="group" aria-label="Ordenar lista">
+          <button data-sort="recent" aria-pressed="true" title="A queda que começou por último aparece primeiro">Mais recentes</button>
+          <button data-sort="severity" aria-pressed="false" title="A queda mais forte aparece primeiro">Mais graves</button>
+        </div>
+      </div>
       <ul class="list" id="listNet"><li class="empty">Carregando…</li></ul>
       <p class="note">Fonte: <a href="https://ioda.inetintel.cc.gatech.edu/" target="_blank" rel="noopener">IODA</a> (Georgia Tech), que mede rotas BGP, ping ativo e tráfego. As regiões são estados e províncias.</p>
     </section>
@@ -283,6 +298,22 @@ const ptName = (a2, fallback) => { try { return (names && a2 && names.of(a2)) ||
 const isDark = () => document.documentElement.dataset.theme !== 'light';
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
+// horários das quedas (segundos Unix vindos do IODA)
+const hhmm = (sec) => {
+  const d = new Date(sec * 1000), today = new Date();
+  const t = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === today.toDateString() ? t : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + t;
+};
+const agoSec = (sec) => ago(new Date(sec * 1000).toISOString());
+const whenText = (t) => !t || !t.start ? '' : t.ongoing
+  ? `<span class="live">em andamento</span> · começou ${agoSec(t.start)}`
+  : `das ${hhmm(t.start)} às ${hhmm(t.end)} · terminou ${agoSec(t.end)}`;
+const whenRows = (t) => !t || !t.start ? [] : [
+  ['Início', `${hhmm(t.start)} <span style="color:var(--muted)">(${agoSec(t.start)})</span>`],
+  ['Situação', t.ongoing ? '<span style="color:var(--alert)">em andamento</span>' : `terminou às ${hhmm(t.end)}`],
+];
+let netSort = 'recent';
+try { if (localStorage.getItem('netSort') === 'severity') netSort = 'severity'; } catch (e) {}
 const ago = (iso) => {
   const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
   return m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.round(m / 60)} h` : `há ${Math.round(m / 1440)} d`;
@@ -704,10 +735,10 @@ function showCountry(f, fly) {
   const news = [...state.cyberNews, ...state.powerNews].filter(n => n.place && n.place.cc === f.a2);
   openDetail(
     `<div class="kind"><span class="sym net"></span>País</div><h2>${esc(ptName(f.a2, f.properties.name))}</h2>` +
-    (o ? rows([['Internet', `<span style="color:var(--alert)">queda ${severity(norm(o.score))}</span>`], ['Eventos (24 h)', o.events],
+    (o ? rows([['Internet', `<span style="color:var(--alert)">queda ${severity(norm(o.score))}</span>`], ...whenRows(o), ['Eventos (24 h)', o.events],
       ...Object.entries(o.parts).map(([k, v]) => [methodName(k), `<span class="mono">${fmt(v)}</span>`])])
        : rows([['Internet', 'sem queda detectada']])) +
-    (regs.length ? `<div class="sec">Regiões afetadas</div>` + rows(regs.slice(0, 8).map(x => [x.name, severity(norm(x.score, regMaxLog))])) : '') +
+    (regs.length ? `<div class="sec">Regiões afetadas</div>` + rows(regs.slice(0, 8).map(x => [x.name, (x.start ? (x.ongoing ? 'agora · ' : 'até ' + hhmm(x.end) + ' · ') : '') + severity(norm(x.score, regMaxLog))])) : '') +
     (r ? `<div class="sec">Ransomware · 72 h</div>` + rows([['Ataques reivindicados', r.count], ...topN(r.sectors).map(([k, v]) => [k, v])]) : '') +
     (news.length ? `<div class="sec">Notícias</div>` + news.slice(0, 5).map(hl).join('') : '') +
     `<p style="margin:12px 0 0;font-size:12px"><a href="https://ioda.inetintel.cc.gatech.edu/country/${f.a2}" target="_blank" rel="noopener">Ver gráficos no IODA ↗</a></p>`);
@@ -718,7 +749,7 @@ function showRegion(r) {
   const t = norm(r.score, regMaxLog);
   openDetail(
     `<div class="kind"><span class="sym net"></span>Região · queda de internet</div><h2>${esc(r.name)}</h2>` +
-    rows([['País', esc(ptName(r.cc))], ['Gravidade', `<span style="color:var(--alert)">${severity(t)}</span>`], ['Eventos (24 h)', r.events],
+    rows([['País', esc(ptName(r.cc))], ['Gravidade', `<span style="color:var(--alert)">${severity(t)}</span>`], ...whenRows(r), ['Eventos (24 h)', r.events],
       ...Object.entries(r.parts).map(([k, v]) => [methodName(k), `<span class="mono">${fmt(v)}</span>`])]) +
     `<p style="margin:12px 0 0;font-size:12px"><a href="https://ioda.inetintel.cc.gatech.edu/region/${encodeURIComponent(r.code)}" target="_blank" rel="noopener">Ver gráficos no IODA ↗</a></p>`);
 }
@@ -797,15 +828,31 @@ function render() {
   const regionCountries = new Set(state.regions.map(r => r.cc));
   const allCc = [...new Set([...ctry.map(([a2]) => a2), ...regionCountries])];
   const scoreOf = (a2) => state.countries[a2] ? norm(state.countries[a2].score) : Math.max(...state.regions.filter(r => r.cc === a2).map(r => norm(r.score, regMaxLog))) * 0.5;
-  allCc.sort((a, b) => scoreOf(b) - scoreOf(a));
+  // horário do país: o dele, ou o da região que caiu por último
+  const timeOf = (a2) => {
+    const o = state.countries[a2];
+    const regs = state.regions.filter(r => r.cc === a2 && r.start);
+    if (o && o.start) return { start: o.start, end: o.end, ongoing: o.ongoing || regs.some(r => r.ongoing) };
+    if (!regs.length) return null;
+    const lastR = regs.reduce((a, b) => (b.start > a.start ? b : a));
+    return { start: lastR.start, end: lastR.end, ongoing: regs.some(r => r.ongoing) };
+  };
+  const startOf = (a2) => (timeOf(a2) || {}).start || 0;
+  if (netSort === 'recent') allCc.sort((a, b) => startOf(b) - startOf(a) || scoreOf(b) - scoreOf(a));
+  else allCc.sort((a, b) => scoreOf(b) - scoreOf(a));
+  document.getElementById('netTitle').textContent = 'Quedas de internet';
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sort === netSort)));
   document.getElementById('cNet').textContent = state.errors.outages && !ctry.length ? '?' : allCc.length;
   const netItems = allCc.map(a2 => {
     const o = state.countries[a2], t = scoreOf(a2);
-    const regs = state.regions.filter(r => r.cc === a2).sort((a, b) => b.score - a.score);
+    const regs = state.regions.filter(r => r.cc === a2)
+      .sort(netSort === 'recent' ? (a, b) => (b.start || 0) - (a.start || 0) || b.score - a.score : (a, b) => b.score - a.score);
+    const w = whenText(timeOf(a2));
     return li(
       `<div class="row1"><span class="sym net"></span><span class="nm">${esc(ptName(a2, o && o.name))}</span>` +
       `<span class="sc">${o ? severity(t) : 'só regiões'}</span><span class="bar"><i style="width:${Math.round(t * 100)}%"></i></span></div>` +
-      (regs.length ? `<div class="subrows">${regs.slice(0, 4).map(r => `<div><span>${esc(r.name)}</span><span>${severity(norm(r.score, regMaxLog))}</span></div>`).join('')}` +
+      (w ? `<div class="when">${w}</div>` : '') +
+      (regs.length ? `<div class="subrows">${regs.slice(0, 4).map(r => `<div><span>${esc(r.name)}</span><span>${r.start ? (r.ongoing ? 'agora' : 'até ' + hhmm(r.end)) + ' · ' : ''}${severity(norm(r.score, regMaxLog))}</span></div>`).join('')}` +
         (regs.length > 4 ? `<div><span>+ ${regs.length - 4} região(ões)</span></div>` : '') + '</div>' : ''),
       () => openCountry(a2));
   });
@@ -854,7 +901,7 @@ async function loadAll() {
     for (const row of Array.isArray(o.value.data) ? o.value.data : []) {
       const code = (row.entity && row.entity.code || '').toUpperCase(); if (!code) continue;
       const scores = row.scores || {}; const parts = { ...scores }; delete parts.overall;
-      next[code] = { score: Number(scores.overall) || 0, events: Number(row.event_cnt) || 0, name: row.entity.name, parts };
+      next[code] = { score: Number(scores.overall) || 0, events: Number(row.event_cnt) || 0, name: row.entity.name, parts, ...((o.value.timing || {})[code] || {}) };
     }
     state.countries = next;
   } else state.errors.outages = o.reason.message;
@@ -1078,6 +1125,11 @@ const Eggs = (() => {
 })();
 
 /* ---------- UI wiring ---------- */
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+  netSort = b.dataset.sort;
+  try { localStorage.setItem('netSort', netSort); } catch (e) {}
+  render();
+});
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   state.mode = b.dataset.tab;
   document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', String(x === b)));

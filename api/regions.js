@@ -1,10 +1,13 @@
-// Quedas de internet por estado/província nas últimas 24 h (IODA), já com coordenadas.
-import { fetchWithTimeout, sendJSON, ioda24h } from '../lib/http.js';
+// Quedas de internet por estado/província nas últimas 24 h (IODA), já com coordenadas e horários.
+import { fetchWithTimeout, sendJSON, ioda24h, iodaTimings } from '../lib/http.js';
 import REGIONS from '../lib/regions.js';
 
 export default async function handler(req, res) {
   try {
-    const r = await fetchWithTimeout(ioda24h('region', 1000), { timeout: 25000 });
+    const [r, timing] = await Promise.all([
+      fetchWithTimeout(ioda24h('region', 1000), { timeout: 25000 }),
+      iodaTimings('region'),
+    ]);
     const j = await r.json();
     const rows = Array.isArray(j.data) ? j.data : [];
     const regions = [];
@@ -24,6 +27,7 @@ export default async function handler(req, res) {
         score: Number(scores.overall) || 0,
         events: Number(row.event_cnt) || 0,
         parts,
+        ...(timing[e.code] || {}),
       });
     }
     sendJSON(res, 200, { updated: new Date().toISOString(), regions }, 300);
